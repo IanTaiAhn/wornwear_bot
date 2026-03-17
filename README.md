@@ -11,7 +11,8 @@ to your phone the moment a match is found.
 ```
 wornwear-bot/
 ├── bot.py                  # Main script
-├── requirements.txt        # Python dependencies
+├── pyproject.toml          # Project config and dependencies
+├── uv.lock                 # Locked dependency versions
 ├── .env.example            # Config template — copy to .env
 ├── wornwear-bot.service    # systemd unit (for VPS hosting)
 └── seen_items.json         # Auto-created — tracks seen products
@@ -25,20 +26,18 @@ wornwear-bot/
 # 1. Clone / copy files into a folder
 cd wornwear-bot
 
-# 2. Create a virtual environment
-python3 -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
+# 2. Install dependencies and set up the environment
+uv sync
 
-# 3. Install dependencies
-pip install -r requirements.txt
-playwright install chromium
+# 3. Install Chromium for Playwright
+uv run playwright install chromium
 
 # 4. Configure
 cp .env.example .env
 nano .env                      # Set your KEYWORDS and NOTIFY_URL
 
 # 5. Run
-python bot.py
+uv run python bot.py
 ```
 
 ---
@@ -53,23 +52,22 @@ python bot.py
 ```bash
 ssh root@your-server-ip
 
-# Install Python and dependencies
-apt update && apt install -y python3 python3-venv python3-pip
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
 
 # Install Chromium dependencies for Playwright
-apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+apt update && apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 \
     libcups2 libdrm2 libxkbcommon0 libxcomposite1 \
     libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
 
 # Copy your bot files up (from your local machine)
 # scp -r ./wornwear-bot root@your-server-ip:/home/ubuntu/
 
-# Set up the venv on the server
+# Install dependencies on the server
 cd /home/ubuntu/wornwear-bot
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-playwright install chromium
+uv sync
+uv run playwright install chromium
 ```
 
 ### 3. Configure
@@ -82,6 +80,8 @@ nano .env     # Set KEYWORDS, NOTIFY_URL, AUTO_ADD_CART
 ```bash
 cp wornwear-bot.service /etc/systemd/system/
 # Edit the file if your username isn't "ubuntu"
+# Also update ExecStart to use uv:
+#   ExecStart=/home/ubuntu/.local/bin/uv run python bot.py
 nano /etc/systemd/system/wornwear-bot.service
 
 systemctl daemon-reload
