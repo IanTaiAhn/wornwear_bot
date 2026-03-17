@@ -1,0 +1,60 @@
+2026-03-16 22:08:46  INFO     Bot started. Keywords: ['synchilla', 'fleece', 'medium']
+2026-03-16 22:08:46  INFO     Poll interval: 30–65s  |  Auto-cart: False
+2026-03-16 22:08:46  INFO     Already seen 0 items from previous runs.
+2026-03-16 22:15:02  INFO     Bot started. Keywords: ['synchilla', 'fleece', 'medium']
+2026-03-16 22:15:02  INFO     Poll interval: 30–65s  |  Auto-cart: False
+2026-03-16 22:15:02  INFO     Already seen 0 items from previous runs.
+2026-03-16 22:15:04  INFO     Checking https://wornwear.patagonia.com/shop/fleece …
+2026-03-16 22:15:12  INFO       Found 0 products on page
+2026-03-16 22:15:12  INFO     Checking https://wornwear.patagonia.com/shop/mens-fleece …
+2026-03-16 22:15:16  INFO       Found 0 products on page
+2026-03-16 22:15:16  INFO     Checking https://wornwear.patagonia.com/shop/womens-fleece …
+2026-03-16 22:15:19  INFO       Found 0 products on page
+2026-03-16 22:15:19  INFO     Sleeping 43s …
+
+2026-03-16 22:16:02  INFO     Checking https://wornwear.patagonia.com/shop/fleece …
+2026-03-16 22:16:06  INFO       Found 0 products on page
+2026-03-16 22:16:06  INFO     Checking https://wornwear.patagonia.com/shop/mens-fleece …
+2026-03-16 22:16:11  INFO       Found 0 products on page
+2026-03-16 22:16:11  INFO     Checking https://wornwear.patagonia.com/shop/womens-fleece …
+2026-03-16 22:16:16  INFO       Found 0 products on page
+2026-03-16 22:16:16  INFO     Sleeping 46s …
+
+2026-03-16 22:17:24  INFO     Bot started. Keywords: ['synchilla', 'fleece', 'medium']
+2026-03-16 22:17:24  INFO     Poll interval: 30–65s  |  Auto-cart: False
+2026-03-16 22:17:24  INFO     Already seen 0 items from previous runs.
+2026-03-16 22:17:26  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-16 22:17:30  INFO       Found 0 products on page
+2026-03-16 22:17:30  INFO     Sleeping 39s …
+
+2026-03-16 22:18:09  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-16 22:18:12  INFO       Found 0 products on page
+2026-03-16 22:18:12  INFO     Sleeping 39s …
+
+2026-03-16 22:18:51  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-16 22:18:55  INFO       Found 0 products on page
+2026-03-16 22:18:55  INFO     Sleeping 32s …
+
+2026-03-16 22:19:06  INFO     Bot started. Keywords: ['retro-x', 'fleece', 'medium']
+2026-03-16 22:19:06  INFO     Poll interval: 30–65s  |  Auto-cart: False
+2026-03-16 22:19:06  INFO     Already seen 0 items from previous runs.
+2026-03-16 22:19:07  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-16 22:19:11  INFO       Found 0 products on page
+2026-03-16 22:19:11  INFO     Sleeping 45s …
+
+2026-03-16 22:23:23  INFO     Bot started. Keywords: ['retro-x']
+2026-03-16 22:23:23  INFO     Poll interval: 10–15s  |  Auto-cart: False
+2026-03-16 22:23:23  INFO     Already seen 0 items from previous runs.
+2026-03-16 22:23:24  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-16 22:23:29  INFO       Found 24 products on page
+2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/mens-classic-retro-x-jacket_23056_nena
+2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/mens-classic-retro-x-jacket_23056_newa
+2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/mens-classic-retro-x-vest_23048_fea
+2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/mens-classic-retro-x-jacket_23056_nat
+2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/ms-retro-x-bomber-jacket_22830_plcn
+2026-03-16 22:23:29  INFO     Sleeping 10s …
+
+2026-03-16 22:23:40  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-16 22:23:43  INFO       Found 24 products on page
+2026-03-16 22:23:43  INFO     Sleeping 11s …
+

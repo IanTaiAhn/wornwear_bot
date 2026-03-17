@@ -4,8 +4,8 @@ Polls wornwear.patagonia.com for items matching your keywords,
 then optionally adds to cart when found.
 
 Requirements:
-    pip install playwright httpx python-dotenv
-    playwright install chromium
+    uv sync
+    uv run playwright install
 """
 
 import asyncio
@@ -33,7 +33,7 @@ logging.basicConfig(
 log = logging.getLogger("wornwear-bot")
 
 # ── Config (edit these or put them in a .env file) ────────────────────────────
-KEYWORDS        = os.getenv("KEYWORDS", "synchilla,fleece,medium").split(",")
+KEYWORDS        = os.getenv("KEYWORDS", "retro-x,fleece,medium").split(",")
 POLL_MIN        = int(os.getenv("POLL_MIN", "30"))       # seconds
 POLL_MAX        = int(os.getenv("POLL_MAX", "65"))       # seconds
 AUTO_ADD_CART   = os.getenv("AUTO_ADD_CART", "false").lower() == "true"
@@ -42,9 +42,7 @@ STATE_FILE      = "seen_items.json"
 
 # Pages to monitor — add more as needed
 TARGET_URLS = [
-    "https://wornwear.patagonia.com/shop/fleece",
-    "https://wornwear.patagonia.com/shop/mens-fleece",
-    "https://wornwear.patagonia.com/shop/womens-fleece",
+    "https://wornwear.patagonia.com/collections/mens-fleece",
 ]
 
 # ── State persistence ─────────────────────────────────────────────────────────
@@ -92,20 +90,24 @@ async def scrape_page(page, url: str) -> list[dict]:
         await page.wait_for_timeout(random.randint(2000, 4000))
 
         # Worn Wear is a React app — products render into the DOM as cards.
-        # This selector may need updating if Patagonia changes their markup.
+        # We find products by looking for links to /products/ URLs
         products = await page.evaluate("""
             () => {
-                const cards = document.querySelectorAll(
-                    '[data-testid="product-card"], .product-card, .ProductCard, article'
-                );
-                return Array.from(cards).map(card => ({
-                    title:  card.querySelector('h2, h3, .product-title, [class*="title"]')
-                                ?.innerText?.trim() || '',
-                    price:  card.querySelector('[class*="price"], .price')
-                                ?.innerText?.trim() || '',
-                    url:    card.querySelector('a')?.href || '',
-                    id:     card.querySelector('a')?.href?.split('/').pop() || ''
-                }));
+                const links = Array.from(document.querySelectorAll('a[href*="/products/"]'));
+
+                return links.map(link => {
+                    const parent = link.closest('div[class*="product"], div[class*="card"], li, article') || link.parentElement;
+
+                    // Try to find price in parent element
+                    const priceEl = parent.querySelector('[class*="price"], .price, [class*="Price"]');
+
+                    return {
+                        title: link.innerText?.trim() || link.querySelector('h1, h2, h3, h4, p')?.innerText?.trim() || '',
+                        price: priceEl?.innerText?.trim() || '',
+                        url: link.href,
+                        id: link.href.split('/').pop()
+                    };
+                }).filter(p => p.title && p.url);
             }
         """)
         return [p for p in products if p.get("title")]
