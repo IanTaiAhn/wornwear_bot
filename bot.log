@@ -1,60 +1,38 @@
-2026-03-16 22:08:46  INFO     Bot started. Keywords: ['synchilla', 'fleece', 'medium']
-2026-03-16 22:08:46  INFO     Poll interval: 30–65s  |  Auto-cart: False
-2026-03-16 22:08:46  INFO     Already seen 0 items from previous runs.
-2026-03-16 22:15:02  INFO     Bot started. Keywords: ['synchilla', 'fleece', 'medium']
-2026-03-16 22:15:02  INFO     Poll interval: 30–65s  |  Auto-cart: False
-2026-03-16 22:15:02  INFO     Already seen 0 items from previous runs.
-2026-03-16 22:15:04  INFO     Checking https://wornwear.patagonia.com/shop/fleece …
-2026-03-16 22:15:12  INFO       Found 0 products on page
-2026-03-16 22:15:12  INFO     Checking https://wornwear.patagonia.com/shop/mens-fleece …
-2026-03-16 22:15:16  INFO       Found 0 products on page
-2026-03-16 22:15:16  INFO     Checking https://wornwear.patagonia.com/shop/womens-fleece …
-2026-03-16 22:15:19  INFO       Found 0 products on page
-2026-03-16 22:15:19  INFO     Sleeping 43s …
+2026-03-17 15:30:44  INFO     Bot started. Keywords: ['retro-x', 'fleece', 'medium']
+2026-03-17 15:30:44  INFO     Poll interval: 30–65s  |  Auto-cart: False
+2026-03-17 15:30:44  INFO     Already seen 5 items from previous runs.
+2026-03-17 15:30:46  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-17 15:30:52  INFO       Found 24 products on page
+2026-03-17 15:30:52  INFO     Sleeping 37s …
 
-2026-03-16 22:16:02  INFO     Checking https://wornwear.patagonia.com/shop/fleece …
-2026-03-16 22:16:06  INFO       Found 0 products on page
-2026-03-16 22:16:06  INFO     Checking https://wornwear.patagonia.com/shop/mens-fleece …
-2026-03-16 22:16:11  INFO       Found 0 products on page
-2026-03-16 22:16:11  INFO     Checking https://wornwear.patagonia.com/shop/womens-fleece …
-2026-03-16 22:16:16  INFO       Found 0 products on page
-2026-03-16 22:16:16  INFO     Sleeping 46s …
+2026-03-17 15:31:29  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-17 15:31:33  INFO       Found 24 products on page
+2026-03-17 15:31:33  INFO     Sleeping 44s …
 
-2026-03-16 22:17:24  INFO     Bot started. Keywords: ['synchilla', 'fleece', 'medium']
-2026-03-16 22:17:24  INFO     Poll interval: 30–65s  |  Auto-cart: False
-2026-03-16 22:17:24  INFO     Already seen 0 items from previous runs.
-2026-03-16 22:17:26  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
-2026-03-16 22:17:30  INFO       Found 0 products on page
-2026-03-16 22:17:30  INFO     Sleeping 39s …
+2026-03-17 15:32:11  INFO     Bot started. Keywords: ['hoody']
+2026-03-17 15:32:11  INFO     Poll interval: 30–65s  |  Auto-cart: False
+2026-03-17 15:32:11  INFO     Already seen 5 items from previous runs.
+2026-03-17 15:32:13  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-17 15:32:18  INFO       Found 24 products on page
+2026-03-17 15:32:18  INFO         URL: https://wornwear.patagonia.com/products/mens-r1-air-full-zip-hoody_40255_rpbn
+2026-03-17 15:32:20  WARNING  Notification failed: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1016)
+2026-03-17 15:32:20  INFO     Sleeping 63s …
 
-2026-03-16 22:18:09  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
-2026-03-16 22:18:12  INFO       Found 0 products on page
-2026-03-16 22:18:12  INFO     Sleeping 39s …
+2026-03-17 15:34:49  INFO     Bot started. Keywords: ['hoody']
+2026-03-17 15:34:49  INFO     Poll interval: 30–65s  |  Auto-cart: False
+2026-03-17 15:34:49  INFO     Already seen 6 items from previous runs.
+2026-03-17 15:34:51  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-17 15:34:56  INFO       Found 24 products on page
+2026-03-17 15:34:56  INFO     Sleeping 36s …
 
-2026-03-16 22:18:51  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
-2026-03-16 22:18:55  INFO       Found 0 products on page
-2026-03-16 22:18:55  INFO     Sleeping 32s …
-
-2026-03-16 22:19:06  INFO     Bot started. Keywords: ['retro-x', 'fleece', 'medium']
-2026-03-16 22:19:06  INFO     Poll interval: 30–65s  |  Auto-cart: False
-2026-03-16 22:19:06  INFO     Already seen 0 items from previous runs.
-2026-03-16 22:19:07  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
-2026-03-16 22:19:11  INFO       Found 0 products on page
-2026-03-16 22:19:11  INFO     Sleeping 45s …
-
-2026-03-16 22:23:23  INFO     Bot started. Keywords: ['retro-x']
-2026-03-16 22:23:23  INFO     Poll interval: 10–15s  |  Auto-cart: False
-2026-03-16 22:23:23  INFO     Already seen 0 items from previous runs.
-2026-03-16 22:23:24  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
-2026-03-16 22:23:29  INFO       Found 24 products on page
-2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/mens-classic-retro-x-jacket_23056_nena
-2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/mens-classic-retro-x-jacket_23056_newa
-2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/mens-classic-retro-x-vest_23048_fea
-2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/mens-classic-retro-x-jacket_23056_nat
-2026-03-16 22:23:29  INFO         URL: https://wornwear.patagonia.com/products/ms-retro-x-bomber-jacket_22830_plcn
-2026-03-16 22:23:29  INFO     Sleeping 10s …
-
-2026-03-16 22:23:40  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
-2026-03-16 22:23:43  INFO       Found 24 products on page
-2026-03-16 22:23:43  INFO     Sleeping 11s …
+2026-03-17 15:36:32  INFO     Bot started. Keywords: ['hoody']
+2026-03-17 15:36:32  INFO     Poll interval: 30–65s  |  Auto-cart: False
+2026-03-17 15:36:32  INFO     Already seen 0 items from previous runs.
+2026-03-17 15:36:33  INFO     Checking https://wornwear.patagonia.com/collections/mens-fleece …
+2026-03-17 15:36:38  INFO       Found 24 products on page
+2026-03-17 15:36:38  INFO         MATCH: Men's R1® Air Full-Zip Hoody  ($103 - $115
+$103 to $115)
+2026-03-17 15:36:38  INFO         URL: https://wornwear.patagonia.com/products/mens-r1-air-full-zip-hoody_40255_rpbn
+2026-03-17 15:36:38  WARNING  Notification failed: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1016)
+2026-03-17 15:36:38  INFO     Sleeping 35s …
 

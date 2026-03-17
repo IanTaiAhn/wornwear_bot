@@ -33,12 +33,25 @@ logging.basicConfig(
 log = logging.getLogger("wornwear-bot")
 
 # ── Config (edit these or put them in a .env file) ────────────────────────────
-KEYWORDS        = os.getenv("KEYWORDS", "retro-x,fleece,medium").split(",")
+KEYWORDS        = os.getenv("KEYWORDS", "hoody").split(",")
 POLL_MIN        = int(os.getenv("POLL_MIN", "30"))       # seconds
 POLL_MAX        = int(os.getenv("POLL_MAX", "65"))       # seconds
 AUTO_ADD_CART   = os.getenv("AUTO_ADD_CART", "false").lower() == "true"
-NOTIFY_URL      = os.getenv("NOTIFY_URL", "")           # ntfy.sh or similar
+NOTIFY_URL      = "https://ntfy.sh/wornwear_bot"
+# NOTIFY_URL      = os.getenv("NOTIFY_URL", "")           # ntfy.sh or similar
 STATE_FILE      = "seen_items.json"
+
+# All known add-to-cart button selectors — extend if Patagonia updates their markup
+ADD_TO_CART_SELECTORS = [
+    "button[data-testid='add-to-cart']",
+    "button:has-text('Add to Cart')",
+    "button:has-text('Add to Bag')",
+    "button:has-text('Add To Cart')",
+    "#add-to-cart",
+    ".add-to-cart",
+    "[class*='AddToCart']",
+    "[class*='add-to-cart']",
+]
 
 # Pages to monitor — add more as needed
 TARGET_URLS = [
@@ -118,7 +131,7 @@ async def scrape_page(page, url: str) -> list[dict]:
 # ── Add to cart ───────────────────────────────────────────────────────────────
 async def add_to_cart(page, product_url: str) -> bool:
     """
-    Navigate to a product page and click the Add to Cart button.
+    Navigate to a product page, select an available size, then click Add to Cart.
     Returns True on success.
     """
     try:
@@ -126,24 +139,89 @@ async def add_to_cart(page, product_url: str) -> bool:
         await page.goto(product_url, wait_until="domcontentloaded", timeout=30_000)
         await page.wait_for_timeout(random.randint(1500, 3000))
 
-        # Try common add-to-cart button selectors
-        selectors = [
-            "button[data-testid='add-to-cart']",
-            "button:has-text('Add to Cart')",
-            "button:has-text('Add to Bag')",
-            "#add-to-cart",
-            ".add-to-cart",
-        ]
-        for sel in selectors:
-            btn = page.locator(sel).first
-            if await btn.is_visible():
-                await btn.click()
-                await page.wait_for_timeout(2000)
-                log.info("✅  Added to cart!")
-                return True
+        title = await page.title()
+        log.info(f"Product page: {title}")
 
-        log.warning("Could not find Add to Cart button")
+        # ── Step 1: select an available size ─────────────────────────────────
+        size_clicked = False
+        try:
+            size_inputs = await page.evaluate("""
+                () => {
+                    const inputs = Array.from(document.querySelectorAll(
+                        'input[name="size-option"]'
+                    ));
+                    return inputs.map(input => ({
+                        value: input.value,
+                        id:    input.id,
+                    }));
+                }
+            """)
+
+            log.info(f"Found {len(size_inputs)} size options: {[s['value'] for s in size_inputs]}")
+
+            for size in size_inputs:
+                label = page.locator(f"label[for='{size['id']}']").first
+                try:
+                    await label.click(timeout=2000)
+                    await page.wait_for_timeout(800)
+
+                    # Confirm the radio is actually checked
+                    is_checked = await page.evaluate(
+                        f"() => document.getElementById('{size['id']}').checked"
+                    )
+                    if is_checked:
+                        log.info(f"Selected size: '{size['value']}'")
+                        size_clicked = True
+                        break
+                    else:
+                        log.info(f"  '{size['value']}' click did not register, trying next")
+                except Exception:
+                    log.info(f"  '{size['value']}' not clickable (likely sold out), trying next")
+
+        except Exception as e:
+            log.warning(f"Size selection error: {e}")
+
+        if not size_clicked:
+            log.warning("Could not select any available size — all may be sold out.")
+
+        # ── Step 2: click Add to Cart ─────────────────────────────────────────
+        for sel in ADD_TO_CART_SELECTORS:
+            try:
+                btn = page.locator(sel).first
+                if await btn.is_visible(timeout=1500) and await btn.is_enabled(timeout=1500):
+                    log.info(f"Found add-to-cart button via: {sel}")
+                    await btn.click()
+                    await page.wait_for_timeout(2500)
+
+                    # Check for cart confirmation signals in the page
+                    cart_signals = await page.evaluate("""
+                        () => {
+                            const signals = [
+                                document.querySelector('[class*="cart"][class*="count"]'),
+                                document.querySelector('[data-testid*="cart"]'),
+                                document.querySelector('[aria-label*="cart"]'),
+                                document.querySelector('[class*="CartCount"]'),
+                            ];
+                            return signals
+                                .filter(Boolean)
+                                .map(el => ({ tag: el.tagName, text: el.innerText?.trim(), class: el.className }));
+                        }
+                    """)
+
+                    if cart_signals:
+                        log.info(f"Cart confirmation detected: {cart_signals}")
+                    else:
+                        log.info("Add to Cart clicked (no cart badge found to confirm, but button was clicked).")
+
+                    return True
+            except Exception:
+                continue
+
+        log.warning("Could not find a visible, enabled Add to Cart button.")
+        log.warning("If this keeps failing, inspect the product page in DevTools and")
+        log.warning("add the button's selector to ADD_TO_CART_SELECTORS in bot.py.")
         return False
+
     except Exception as e:
         log.error(f"Add to cart failed: {e}")
         return False
@@ -185,7 +263,7 @@ async def run():
                         continue  # already processed
 
                     if matches_keywords(title, KEYWORDS):
-                        log.info(f"🎯  MATCH: {title}  ({product.get('price', '?')})")
+                        log.info(f"    MATCH: {title}  ({product.get('price', '?')})")
                         log.info(f"    URL: {product.get('url')}")
 
                         await notify(
@@ -194,7 +272,17 @@ async def run():
                         )
 
                         if AUTO_ADD_CART and product.get("url"):
-                            await add_to_cart(page, product["url"])
+                            success = await add_to_cart(page, product["url"])
+                            if success:
+                                await notify(
+                                    title="Added to Cart!",
+                                    body=f"{title} was added to your cart.\n{product.get('url','')}",
+                                )
+                            else:
+                                await notify(
+                                    title="Add to Cart Failed",
+                                    body=f"Found {title} but couldn't add to cart — check logs.\n{product.get('url','')}",
+                                )
 
                         seen.add(pid)
                         save_seen(seen)
