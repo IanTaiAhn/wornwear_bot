@@ -238,14 +238,14 @@ Press `Ctrl+C` to stop watching logs (the bot keeps running).
 
 ## Useful Commands Reference
 
-| Task | Command |
-|---|---|
-| Check if bot is running | `sudo systemctl status wornwear-bot` |
-| Watch live logs | `journalctl -u wornwear-bot -f` |
-| Stop the bot | `sudo systemctl stop wornwear-bot` |
-| Restart the bot | `sudo systemctl restart wornwear-bot` |
-| View recent logs | `journalctl -u wornwear-bot -n 50` |
-| Edit keywords | `nano /home/ubuntu/wornwear-bot/.env` then restart |
+| Task                    | Command                                            |
+| ----------------------- | -------------------------------------------------- |
+| Check if bot is running | `sudo systemctl status wornwear-bot`               |
+| Watch live logs         | `journalctl -u wornwear-bot -f`                    |
+| Stop the bot            | `sudo systemctl stop wornwear-bot`                 |
+| Restart the bot         | `sudo systemctl restart wornwear-bot`              |
+| View recent logs        | `journalctl -u wornwear-bot -n 50`                 |
+| Edit keywords           | `nano /home/ubuntu/wornwear-bot/.env` then restart |
 
 ---
 
@@ -255,7 +255,7 @@ When you make changes locally and want to push them to the server:
 
 ```bash
 # From your local machine — upload changed files
-scp /path/to/your/wornwear-bot/bot.py ubuntu@YOUR_DROPLET_IP:/home/ubuntu/wornwear-bot/
+scp -i ~/.ssh/wornwear-bot -r /c/Users/ianta/wornwear_bot root@64.23.131.88:/root/wornwear-bot
 
 # Then on the server, restart the service to pick up the changes
 sudo systemctl restart wornwear-bot
