@@ -260,6 +260,10 @@ scp -i ~/.ssh/wornwear-bot -r /c/Users/ianta/wornwear_bot root@64.23.131.88:/roo
 # Try this command next time instead of re-copying everything.
 ssh -i ~/.ssh/wornwear-bot root@64.23.131.88 "cd /root/wornwear-bot && git pull"
 
+# Will ensure head is pointed to most recent commit on remote branch
+ssh -i ~/.ssh/wornwear-bot root@64.23.131.88 "cd /root/wornwear-bot && git fetch origin && git reset --hard origin/main"
+
+
 # Then on the server, restart the service to pick up the changes
 sudo systemctl restart wornwear-bot
 ```
