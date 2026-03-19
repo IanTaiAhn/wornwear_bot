@@ -1,3 +1,5 @@
+# WINNER WINNER CHIK'N DINNER
+
 # noVNC Remote Browser — Implementation Guide
 
 Get the Worn Wear bot's Chromium browser accessible from your phone so you can
@@ -367,15 +369,15 @@ browsers — you can tap to click and use the on-screen keyboard for form fields
 
 ## Useful Commands
 
-| Task | Command |
-|---|---|
-| Watch live logs | `journalctl -u wornwear-bot -f` |
-| Check memory | `free -m` |
-| Restart everything | `systemctl restart xvfb x11vnc novnc wornwear-bot` |
-| Stop bot only | `systemctl stop wornwear-bot` |
-| Check all service status | `systemctl status xvfb x11vnc novnc wornwear-bot` |
-| Check VNC is listening | `ss -tlnp \| grep 5900` |
-| Check noVNC is listening | `ss -tlnp \| grep 6080` |
+| Task                     | Command                                            |
+| ------------------------ | -------------------------------------------------- |
+| Watch live logs          | `journalctl -u wornwear-bot -f`                    |
+| Check memory             | `free -m`                                          |
+| Restart everything       | `systemctl restart xvfb x11vnc novnc wornwear-bot` |
+| Stop bot only            | `systemctl stop wornwear-bot`                      |
+| Check all service status | `systemctl status xvfb x11vnc novnc wornwear-bot`  |
+| Check VNC is listening   | `ss -tlnp \| grep 5900`                            |
+| Check noVNC is listening | `ss -tlnp \| grep 6080`                            |
 
 ---
 
