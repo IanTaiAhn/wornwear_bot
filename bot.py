@@ -16,8 +16,10 @@ Requirements:
     STYLE_NUMBERS=25523,19975          # ANY match triggers alert (comma-separated, optional)
     POLL_MIN=30
     POLL_MAX=65
-    AUTO_ADD_CART=false
+    AUTO_ADD_CART=true                 # Set to true to auto-bag items
     NOTIFY_URL=https://ntfy.sh/your-topic
+    USE_VNC=false                      # Set to true on droplet for noVNC access
+    DROPLET_IP=                        # Your droplet IP (for noVNC links)
 
 Matching logic:
   - If KEYWORDS set and STYLE_NUMBERS set: alert if keywords match OR style # matches
@@ -61,6 +63,10 @@ POLL_MIN      = int(os.getenv("POLL_MIN", "30"))
 POLL_MAX      = int(os.getenv("POLL_MAX", "65"))
 AUTO_ADD_CART = os.getenv("AUTO_ADD_CART", "false").lower() == "true"
 NOTIFY_URL    = os.getenv("NOTIFY_URL", "")
+
+# noVNC setup (set USE_VNC=true on production droplet)
+USE_VNC       = os.getenv("USE_VNC", "false").lower() == "true"
+DROPLET_IP    = os.getenv("DROPLET_IP", "")
 
 STATE_FILE   = "seen_items.json"
 
@@ -116,6 +122,24 @@ async def notify(title: str, body: str):
         log.info(f"Notification sent: {title}")
     except Exception as e:
         log.warning(f"Notification failed: {e}")
+
+
+async def cart_expiry_warning(title: str, url: str, delay_seconds: int = 1500):
+    """Fire a warning notification before the cart expires (default 25 min)."""
+    await asyncio.sleep(delay_seconds)
+
+    novnc_url = f"http://{DROPLET_IP}:6080/vnc.html?autoconnect=true" if DROPLET_IP and USE_VNC else ""
+
+    warning_body = f"{title} — cart expires in 5 minutes!\n"
+    if novnc_url:
+        warning_body += f"\n🖥️ Checkout now:\n{novnc_url}"
+    else:
+        warning_body += f"\n{url}"
+
+    await notify(
+        title="⚠️ Cart expiring in 5 minutes!",
+        body=warning_body,
+    )
 
 
 # ── Matching logic ────────────────────────────────────────────────────────────
@@ -311,6 +335,7 @@ async def run():
     log.info(f"  Keywords:     {KEYWORDS or '(none)'}")
     log.info(f"  Style #s:     {STYLE_NUMBERS or '(none)'}")
     log.info(f"  Poll interval: {POLL_MIN}–{POLL_MAX}s  |  Auto-cart: {AUTO_ADD_CART}")
+    log.info(f"  VNC mode:     {'enabled' if USE_VNC else 'disabled (local/headless)'}")
     log.info(f"  Seen items:   {len(seen)} from previous runs")
 
     if not KEYWORDS and not STYLE_NUMBERS:
@@ -320,9 +345,14 @@ async def run():
         return
 
     async with async_playwright() as pw:
+        # Configure browser based on VNC mode
+        launch_args = ["--no-sandbox", "--disable-dev-shm-usage"]
+        if USE_VNC:
+            launch_args.append("--display=:99")
+
         browser = await pw.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            headless=not USE_VNC,  # headless=False when VNC is enabled
+            args=launch_args,
         )
         context = await browser.new_context(
             user_agent=(
@@ -375,36 +405,45 @@ async def run():
                     log.info(f"  MATCH ({', '.join(match_reason)}): {title}  ({product.get('price', '?')})")
                     log.info(f"  URL: {product.get('url')}")
 
-                    await notify(
-                        title="Worn Wear Match Found!",
-                        body=(
-                            f"{title} — {product.get('price', '')}\n"
-                            f"Matched: {', '.join(match_reason)}\n"
-                            f"{product.get('url', '')}"
-                        ),
+                    # Build notification with noVNC link if VNC is enabled
+                    novnc_url = f"http://{DROPLET_IP}:6080/vnc.html?autoconnect=true" if DROPLET_IP and USE_VNC else ""
+
+                    notification_body = (
+                        f"{title} — {product.get('price', '')}\n"
+                        f"Matched: {', '.join(match_reason)}\n"
+                        f"{product.get('url', '')}"
                     )
 
                     if AUTO_ADD_CART and product.get("url"):
-                        # If we already loaded the product page for style checking,
-                        # we're already on it — add_to_cart will navigate there again
-                        # which is fine (idempotent).
+                        # Bag the item first
                         success = await add_to_cart(page, product["url"])
+
                         if success:
+                            notification_body += "\n\n✅ Item bagged! You have 30 minutes."
+                            if novnc_url:
+                                notification_body += f"\n\n🖥️ Complete checkout here:\n{novnc_url}"
+
                             await notify(
-                                title="Added to Cart!",
+                                title="🎯 Worn Wear — Item Bagged!",
+                                body=notification_body,
+                            )
+
+                            # Schedule 25-minute expiry warning
+                            asyncio.create_task(cart_expiry_warning(title, product.get("url", "")))
+                        else:
+                            await notify(
+                                title="⚠️ Add to Cart Failed",
                                 body=(
-                                    f"{title} was added to your cart.\n"
+                                    f"Found {title} but couldn't add to cart — check logs.\n"
                                     f"{product.get('url', '')}"
                                 ),
                             )
-                        else:
-                            await notify(
-                                title="Add to Cart Failed",
-                                body=(
-                                    f"Found {title} but couldn't add to cart "
-                                    f"— check logs.\n{product.get('url', '')}"
-                                ),
-                            )
+                    else:
+                        # Just notify without bagging
+                        await notify(
+                            title="Worn Wear Match Found!",
+                            body=notification_body,
+                        )
 
                     seen.add(pid)
                     save_seen(seen)
