@@ -257,6 +257,9 @@ When you make changes locally and want to push them to the server:
 # From your local machine — upload changed files
 scp -i ~/.ssh/wornwear-bot -r /c/Users/ianta/wornwear_bot root@64.23.131.88:/root/wornwear-bot
 
+# Try this command next time instead of re-copying everything.
+ssh -i ~/.ssh/wornwear-bot root@64.23.131.88 "cd /root/wornwear-bot && git pull"
+
 # Then on the server, restart the service to pick up the changes
 sudo systemctl restart wornwear-bot
 ```
