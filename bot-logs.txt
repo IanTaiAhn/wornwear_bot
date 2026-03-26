@@ -1,0 +1,100 @@
+Mar 26 04:05:21 wornwear-bot uv[90411]: 2026-03-26 04:05:21  INFO       Style #s:     ['25528']
+Mar 26 04:05:21 wornwear-bot uv[90411]: 2026-03-26 04:05:21  INFO       Poll interval: 10–15s  |  Auto-cart: False
+Mar 26 04:05:21 wornwear-bot uv[90411]: 2026-03-26 04:05:21  INFO       VNC mode:     enabled
+Mar 26 04:05:21 wornwear-bot uv[90411]: 2026-03-26 04:05:21  INFO       Seen items:   19 from previous runs
+Mar 26 04:05:22 wornwear-bot uv[90411]: Traceback (most recent call last):
+Mar 26 04:05:22 wornwear-bot uv[90411]:   File "/root/wornwear-bot/bot.py", line 457, in <module>
+Mar 26 04:05:22 wornwear-bot uv[90411]:     asyncio.run(run())
+Mar 26 04:05:22 wornwear-bot uv[90411]:   File "/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/asyncio/runners.py", line 190, in run
+Mar 26 04:05:22 wornwear-bot uv[90411]:     return runner.run(main)
+Mar 26 04:05:22 wornwear-bot uv[90411]:            ^^^^^^^^^^^^^^^^
+Mar 26 04:05:22 wornwear-bot uv[90411]:   File "/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/asyncio/runners.py", line 118, in run
+Mar 26 04:05:22 wornwear-bot uv[90411]:     return self._loop.run_until_complete(task)
+Mar 26 04:05:22 wornwear-bot uv[90411]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Mar 26 04:05:22 wornwear-bot uv[90411]:   File "/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+Mar 26 04:05:22 wornwear-bot uv[90411]:     return future.result()
+Mar 26 04:05:22 wornwear-bot uv[90411]:            ^^^^^^^^^^^^^^^
+Mar 26 04:05:22 wornwear-bot uv[90411]:   File "/root/wornwear-bot/bot.py", line 353, in run
+Mar 26 04:05:22 wornwear-bot uv[90411]:     browser = await pw.chromium.launch(
+Mar 26 04:05:22 wornwear-bot uv[90411]:               ^^^^^^^^^^^^^^^^^^^^^^^^^
+Mar 26 04:05:22 wornwear-bot uv[90411]:   File "/root/wornwear-bot/.venv/lib/python3.11/site-packages/playwright/async_api/_generated.py", line 14547, in launch
+Mar 26 04:05:22 wornwear-bot uv[90411]:     await self._impl_obj.launch(
+Mar 26 04:05:22 wornwear-bot uv[90411]:   File "/root/wornwear-bot/.venv/lib/python3.11/site-packages/playwright/_impl/_browser_type.py", line 97, in launch
+Mar 26 04:05:22 wornwear-bot uv[90411]:     await self._channel.send(
+Mar 26 04:05:22 wornwear-bot uv[90411]:   File "/root/wornwear-bot/.venv/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 69, in send
+Mar 26 04:05:22 wornwear-bot uv[90411]:     return await self._connection.wrap_api_call(
+Mar 26 04:05:22 wornwear-bot uv[90411]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Mar 26 04:05:22 wornwear-bot uv[90411]:   File "/root/wornwear-bot/.venv/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 559, in wrap_api_call
+Mar 26 04:05:22 wornwear-bot uv[90411]:     raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+Mar 26 04:05:22 wornwear-bot uv[90411]: playwright._impl._errors.TargetClosedError: BrowserType.launch: Target page, context or browser has been closed
+Mar 26 04:05:22 wornwear-bot uv[90411]: Browser logs:
+Mar 26 04:05:22 wornwear-bot uv[90411]: <launching> /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --no-sandbox --no-sandbox --disable-dev-shm-usage --display=:99 --user-data-dir=/tmp/playwright_chromiumdev_profile-C94ap8 --remote-debugging-pipe --no-startup-window
+Mar 26 04:05:22 wornwear-bot uv[90411]: <launched> pid=90424
+Mar 26 04:05:22 wornwear-bot uv[90411]: [pid=90424][err] /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome: error while loading shared libraries: libcairo.so.2: cannot open shared object file: No such file or directory
+Mar 26 04:05:22 wornwear-bot uv[90411]: Call log:
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - <launching> /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --no-sandbox --no-sandbox --disable-dev-shm-usage --display=:99 --user-data-dir=/tmp/playwright_chromiumdev_profile-C94ap8 --remote-debugging-pipe --no-startup-window
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - <launched> pid=90424
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - [pid=90424][err] /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome: error while loading shared libraries: libcairo.so.2: cannot open shared object file: No such file or directory
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - [pid=90424] <gracefully close start>
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - [pid=90424] <kill>
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - [pid=90424] <will force kill>
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - [pid=90424] exception while trying to kill process: Error: kill ESRCH
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - [pid=90424] <process did exit: exitCode=127, signal=null>
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - [pid=90424] starting temporary directories cleanup
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - [pid=90424] finished temporary directories cleanup
+Mar 26 04:05:22 wornwear-bot uv[90411]:   - [pid=90424] <gracefully close end>
+Mar 26 04:05:22 wornwear-bot systemd[1]: wornwear-bot.service: Main process exited, code=exited, status=1/FAILURE
+Mar 26 04:05:22 wornwear-bot systemd[1]: wornwear-bot.service: Failed with result 'exit-code'.
+Mar 26 04:05:22 wornwear-bot systemd[1]: wornwear-bot.service: Consumed 1.048s CPU time.
+Mar 26 04:05:33 wornwear-bot systemd[1]: wornwear-bot.service: Scheduled restart job, restart counter is at 25.
+Mar 26 04:05:33 wornwear-bot systemd[1]: Started wornwear-bot.service - Worn Wear Monitor Bot.
+Mar 26 04:05:33 wornwear-bot uv[90429]: 2026-03-26 04:05:33  INFO     Bot started.
+Mar 26 04:05:33 wornwear-bot uv[90429]: 2026-03-26 04:05:33  INFO       Keywords:     ['retro-x']
+Mar 26 04:05:33 wornwear-bot uv[90429]: 2026-03-26 04:05:33  INFO       Style #s:     ['25528']
+Mar 26 04:05:33 wornwear-bot uv[90429]: 2026-03-26 04:05:33  INFO       Poll interval: 10–15s  |  Auto-cart: False
+Mar 26 04:05:33 wornwear-bot uv[90429]: 2026-03-26 04:05:33  INFO       VNC mode:     enabled
+Mar 26 04:05:33 wornwear-bot uv[90429]: 2026-03-26 04:05:33  INFO       Seen items:   19 from previous runs
+Mar 26 04:05:34 wornwear-bot uv[90429]: Traceback (most recent call last):
+Mar 26 04:05:34 wornwear-bot uv[90429]:   File "/root/wornwear-bot/bot.py", line 457, in <module>
+Mar 26 04:05:34 wornwear-bot uv[90429]:     asyncio.run(run())
+Mar 26 04:05:34 wornwear-bot uv[90429]:   File "/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/asyncio/runners.py", line 190, in run
+Mar 26 04:05:34 wornwear-bot uv[90429]:     return runner.run(main)
+Mar 26 04:05:34 wornwear-bot uv[90429]:            ^^^^^^^^^^^^^^^^
+Mar 26 04:05:34 wornwear-bot uv[90429]:   File "/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/asyncio/runners.py", line 118, in run
+Mar 26 04:05:34 wornwear-bot uv[90429]:     return self._loop.run_until_complete(task)
+Mar 26 04:05:34 wornwear-bot uv[90429]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Mar 26 04:05:34 wornwear-bot uv[90429]:   File "/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+Mar 26 04:05:34 wornwear-bot uv[90429]:     return future.result()
+Mar 26 04:05:34 wornwear-bot uv[90429]:            ^^^^^^^^^^^^^^^
+Mar 26 04:05:34 wornwear-bot uv[90429]:   File "/root/wornwear-bot/bot.py", line 353, in run
+Mar 26 04:05:34 wornwear-bot uv[90429]:     browser = await pw.chromium.launch(
+Mar 26 04:05:34 wornwear-bot uv[90429]:               ^^^^^^^^^^^^^^^^^^^^^^^^^
+Mar 26 04:05:34 wornwear-bot uv[90429]:   File "/root/wornwear-bot/.venv/lib/python3.11/site-packages/playwright/async_api/_generated.py", line 14547, in launch
+Mar 26 04:05:34 wornwear-bot uv[90429]:     await self._impl_obj.launch(
+Mar 26 04:05:34 wornwear-bot uv[90429]:   File "/root/wornwear-bot/.venv/lib/python3.11/site-packages/playwright/_impl/_browser_type.py", line 97, in launch
+Mar 26 04:05:34 wornwear-bot uv[90429]:     await self._channel.send(
+Mar 26 04:05:34 wornwear-bot uv[90429]:   File "/root/wornwear-bot/.venv/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 69, in send
+Mar 26 04:05:34 wornwear-bot uv[90429]:     return await self._connection.wrap_api_call(
+Mar 26 04:05:34 wornwear-bot uv[90429]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Mar 26 04:05:34 wornwear-bot uv[90429]:   File "/root/wornwear-bot/.venv/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 559, in wrap_api_call
+Mar 26 04:05:34 wornwear-bot uv[90429]:     raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+Mar 26 04:05:34 wornwear-bot uv[90429]: playwright._impl._errors.TargetClosedError: BrowserType.launch: Target page, context or browser has been closed
+Mar 26 04:05:34 wornwear-bot uv[90429]: Browser logs:
+Mar 26 04:05:34 wornwear-bot uv[90429]: <launching> /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --no-sandbox --no-sandbox --disable-dev-shm-usage --display=:99 --user-data-dir=/tmp/playwright_chromiumdev_profile-bTbwxV --remote-debugging-pipe --no-startup-window
+Mar 26 04:05:34 wornwear-bot uv[90429]: <launched> pid=90442
+Mar 26 04:05:34 wornwear-bot uv[90429]: [pid=90442][err] /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome: error while loading shared libraries: libcairo.so.2: cannot open shared object file: No such file or directory
+Mar 26 04:05:34 wornwear-bot uv[90429]: Call log:
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - <launching> /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --no-sandbox --no-sandbox --disable-dev-shm-usage --display=:99 --user-data-dir=/tmp/playwright_chromiumdev_profile-bTbwxV --remote-debugging-pipe --no-startup-window
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - <launched> pid=90442
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - [pid=90442][err] /root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome: error while loading shared libraries: libcairo.so.2: cannot open shared object file: No such file or directory
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - [pid=90442] <gracefully close start>
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - [pid=90442] <kill>
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - [pid=90442] <will force kill>
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - [pid=90442] exception while trying to kill process: Error: kill ESRCH
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - [pid=90442] <process did exit: exitCode=127, signal=null>
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - [pid=90442] starting temporary directories cleanup
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - [pid=90442] finished temporary directories cleanup
+Mar 26 04:05:34 wornwear-bot uv[90429]:   - [pid=90442] <gracefully close end>
+Mar 26 04:05:34 wornwear-bot systemd[1]: wornwear-bot.service: Main process exited, code=exited, status=1/FAILURE
+Mar 26 04:05:34 wornwear-bot systemd[1]: wornwear-bot.service: Failed with result 'exit-code'.
+Mar 26 04:05:34 wornwear-bot systemd[1]: wornwear-bot.service: Consumed 1.029s CPU time.
