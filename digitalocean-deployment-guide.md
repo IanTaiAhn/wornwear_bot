@@ -11,6 +11,24 @@ A step-by-step guide to get the bot running 24/7 on a DigitalOcean droplet.
 - An SSH key pair (we'll generate one if you don't have one)
 - Your `.env` file configured with keywords and notify URL
 
+## User Choice: root vs ubuntu
+
+This guide covers setup for **both** root and ubuntu users:
+
+- **root** (simpler, faster setup):
+  - Default user on DigitalOcean droplets
+  - Skip Step 2's user creation steps
+  - Use `/root/wornwear-bot` paths throughout
+  - Less secure but fine for personal projects
+
+- **ubuntu** (more secure, recommended):
+  - Follow Step 2 to create a non-root user
+  - Use `/home/ubuntu/wornwear-bot` paths
+  - Better security practice for production
+  - Slightly more setup steps
+
+Choose one approach and stick with it throughout the guide.
+
 ---
 
 ## Step 1 — Create Your Droplet
@@ -59,7 +77,9 @@ apt install -y \
     libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
 ```
 
-Create a non-root user to run the bot (better security practice than running as root):
+**(Optional but recommended)** Create a non-root user to run the bot:
+
+> If you're running as root, **skip this section** and proceed to Step 3.
 
 ```bash
 adduser ubuntu
@@ -73,11 +93,13 @@ rsync --archive --chown=ubuntu:ubuntu ~/.ssh /home/ubuntu
 
 ## Step 3 — Install uv
 
-Log in as the `ubuntu` user:
+If you created an `ubuntu` user, log in as them:
 
 ```bash
 su - ubuntu
 ```
+
+If you're running as `root`, stay logged in as root.
 
 Install uv:
 
@@ -100,17 +122,22 @@ uv --version
 
 On your **local machine** (open a new terminal tab, don't close the server one), upload the project folder:
 
+**If running as ubuntu:**
 ```bash
 scp -r /path/to/your/wornwear-bot ubuntu@YOUR_DROPLET_IP:/home/ubuntu/wornwear-bot
+```
+
+**If running as root:**
+```bash
+scp -r /path/to/your/wornwear-bot root@YOUR_DROPLET_IP:/root/wornwear-bot
 ```
 
 > Replace `/path/to/your/wornwear-bot` with the actual path to your local project folder.
 
 Back on the **server**, verify the files arrived:
 
-```bash
-ls /home/ubuntu/wornwear-bot
-```
+**If ubuntu:** `ls /home/ubuntu/wornwear-bot`
+**If root:** `ls /root/wornwear-bot`
 
 You should see `bot.py`, `pyproject.toml`, `uv.lock`, `.env.example`, and `wornwear-bot.service`.
 
@@ -118,9 +145,11 @@ You should see `bot.py`, `pyproject.toml`, `uv.lock`, `.env.example`, and `wornw
 
 ## Step 5 — Configure the Bot
 
-```bash
-cd /home/ubuntu/wornwear-bot
+Navigate to your bot directory:
+- **If ubuntu:** `cd /home/ubuntu/wornwear-bot`
+- **If root:** `cd /root/wornwear-bot`
 
+```bash
 # Create your .env from the template
 cp .env.example .env
 nano .env
@@ -140,9 +169,9 @@ Save and exit nano with `Ctrl+O`, then `Enter`, then `Ctrl+X`.
 
 ## Step 6 — Install Dependencies & Playwright
 
-```bash
-cd /home/ubuntu/wornwear-bot
+From your bot directory:
 
+```bash
 # Install Python dependencies
 uv sync
 
@@ -157,7 +186,6 @@ uv run playwright install chromium
 Before setting up the service, confirm the bot works:
 
 ```bash
-cd /home/ubuntu/wornwear-bot
 uv run python bot.py
 ```
 
@@ -177,14 +205,45 @@ If it's working, stop it with `Ctrl+C` and move on to the next step.
 
 ## Step 8 — Install as a System Service
 
-Copy the service file and edit it to match your setup:
+Copy the service file template to systemd:
 
+**If running as root:**
+```bash
+sudo cp /root/wornwear-bot/wornwear-bot.service /etc/systemd/system/
+sudo nano /etc/systemd/system/wornwear-bot.service
+```
+
+**If running as ubuntu:**
 ```bash
 sudo cp /home/ubuntu/wornwear-bot/wornwear-bot.service /etc/systemd/system/
 sudo nano /etc/systemd/system/wornwear-bot.service
 ```
 
-Update the `ExecStart` line to use `uv`:
+**Replace the entire file content** with the correct configuration for your user:
+
+### If running as `root`:
+
+```ini
+[Unit]
+Description=Worn Wear Monitor Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/wornwear-bot
+ExecStart=/root/.local/bin/uv run python bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### If running as `ubuntu`:
 
 ```ini
 [Unit]
@@ -206,7 +265,11 @@ StandardError=journal
 WantedBy=multi-user.target
 ```
 
-> The key change is `ExecStart` — it now uses the full path to `uv` so systemd can find it.
+> **Key points:**
+> - `User=` must match who you're logged in as
+> - `WorkingDirectory=` must match where your bot files are
+> - `ExecStart=` uses the full path to `uv` (not a venv) so systemd can find it
+> - The template service file in the repo is outdated — always use the config above
 
 Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`), then enable and start the service:
 
@@ -238,14 +301,15 @@ Press `Ctrl+C` to stop watching logs (the bot keeps running).
 
 ## Useful Commands Reference
 
-| Task                    | Command                                            |
-| ----------------------- | -------------------------------------------------- |
-| Check if bot is running | `sudo systemctl status wornwear-bot`               |
-| Watch live logs         | `journalctl -u wornwear-bot -f`                    |
-| Stop the bot            | `sudo systemctl stop wornwear-bot`                 |
-| Restart the bot         | `sudo systemctl restart wornwear-bot`              |
-| View recent logs        | `journalctl -u wornwear-bot -n 50`                 |
-| Edit keywords           | `nano /home/ubuntu/wornwear-bot/.env` then restart |
+| Task                    | Command                                                      |
+| ----------------------- | ------------------------------------------------------------ |
+| Check if bot is running | `systemctl status wornwear-bot` (add `sudo` if using ubuntu)|
+| Watch live logs         | `journalctl -u wornwear-bot -f`                              |
+| Stop the bot            | `systemctl stop wornwear-bot` (add `sudo` if using ubuntu)  |
+| Restart the bot         | `systemctl restart wornwear-bot` (add `sudo` if using ubuntu)|
+| View recent logs        | `journalctl -u wornwear-bot -n 50`                           |
+| Edit keywords (ubuntu)  | `nano /home/ubuntu/wornwear-bot/.env` then restart          |
+| Edit keywords (root)    | `nano /root/wornwear-bot/.env` then restart                 |
 
 ---
 
@@ -255,14 +319,15 @@ When you make changes locally and want to push them to the server:
 
 ```bash
 # From your local machine — upload changed files
-scp -i ~/.ssh/wornwear-bot -r /c/Users/ianta/wornwear_bot root@64.23.131.88:/root/wornwear-bot
+# If running as root:
+scp -r /path/to/local/wornwear_bot root@YOUR_DROPLET_IP:/root/wornwear-bot
 
-# Try this command next time instead of re-copying everything.
-ssh -i ~/.ssh/wornwear-bot root@64.23.131.88 "cd /root/wornwear-bot && git pull"
+# If running as ubuntu:
+scp -r /path/to/local/wornwear_bot ubuntu@YOUR_DROPLET_IP:/home/ubuntu/wornwear-bot
 
-# Will ensure head is pointed to most recent commit on remote branch
-ssh -i ~/.ssh/wornwear-bot root@64.23.131.88 "cd /root/wornwear-bot && git fetch origin && git reset --hard origin/main"
-
+# OR if using git (recommended):
+# On your server, pull latest changes:
+ssh root@YOUR_DROPLET_IP "cd /root/wornwear-bot && git pull"
 
 # Then on the server, restart the service to pick up the changes
 sudo systemctl restart wornwear-bot
@@ -274,10 +339,18 @@ sudo systemctl restart wornwear-bot
 
 You don't need to touch any code — just edit `.env` on the server and restart:
 
+**If ubuntu:**
 ```bash
 nano /home/ubuntu/wornwear-bot/.env
 # make your changes, save and exit
 sudo systemctl restart wornwear-bot
+```
+
+**If root:**
+```bash
+nano /root/wornwear-bot/.env
+# make your changes, save and exit
+systemctl restart wornwear-bot
 ```
 
 ---

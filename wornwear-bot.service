@@ -2,18 +2,26 @@
 # This keeps the bot running forever on a Linux VPS.
 # If it crashes, systemd restarts it automatically.
 #
+# IMPORTANT: This template is for reference only.
+# Follow the instructions in digitalocean-deployment-guide.md Step 8 for the
+# correct configuration based on your user (root or ubuntu).
+#
 # SETUP:
 #   1. Copy this file to /etc/systemd/system/wornwear-bot.service
-#   2. Edit the User, WorkingDirectory, and ExecStart paths below
+#   2. Replace the entire content with the correct config from the deployment guide
 #   3. sudo systemctl daemon-reload
 #   4. sudo systemctl enable wornwear-bot   # start on boot
 #   5. sudo systemctl start wornwear-bot    # start now
 #
 # USEFUL COMMANDS:
-#   sudo systemctl status wornwear-bot      # check if running
-#   sudo journalctl -u wornwear-bot -f      # live logs
-#   sudo systemctl stop wornwear-bot        # stop it
-#   sudo systemctl restart wornwear-bot     # restart it
+#   systemctl status wornwear-bot           # check if running
+#   journalctl -u wornwear-bot -f           # live logs
+#   systemctl stop wornwear-bot             # stop it
+#   systemctl restart wornwear-bot          # restart it
+#
+# ───────────────────────────────────────────────────────────────────────────────
+# FOR ROOT USER:
+# ───────────────────────────────────────────────────────────────────────────────
 
 [Unit]
 Description=Worn Wear Monitor Bot
@@ -22,9 +30,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/wornwear-bot
-ExecStart=/home/ubuntu/wornwear-bot/venv/bin/python bot.py
+User=root
+WorkingDirectory=/root/wornwear-bot
+ExecStart=/root/.local/bin/uv run python bot.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -32,3 +40,25 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
+
+# ───────────────────────────────────────────────────────────────────────────────
+# FOR UBUNTU USER (comment out the above, uncomment below):
+# ───────────────────────────────────────────────────────────────────────────────
+#
+# [Unit]
+# Description=Worn Wear Monitor Bot
+# After=network-online.target
+# Wants=network-online.target
+#
+# [Service]
+# Type=simple
+# User=ubuntu
+# WorkingDirectory=/home/ubuntu/wornwear-bot
+# ExecStart=/home/ubuntu/.local/bin/uv run python bot.py
+# Restart=always
+# RestartSec=10
+# StandardOutput=journal
+# StandardError=journal
+#
+# [Install]
+# WantedBy=multi-user.target
