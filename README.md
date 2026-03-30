@@ -45,10 +45,12 @@ uv run python bot.py
 ## VPS Deployment (DigitalOcean / Hetzner / etc.)
 
 ### 1. Spin up a server
+
 - DigitalOcean: $4/mo "Basic Droplet", Ubuntu 22.04
 - Hetzner: €3.29/mo CX11, even cheaper
 
 ### 2. SSH in and set up
+
 ```bash
 ssh root@your-server-ip
 
@@ -71,12 +73,14 @@ uv run playwright install chromium
 ```
 
 ### 3. Configure
+
 ```bash
 cp .env.example .env
 nano .env     # Set KEYWORDS, NOTIFY_URL, AUTO_ADD_CART
 ```
 
 ### 4. Install as a system service (runs forever, restarts on crash)
+
 ```bash
 cp wornwear-bot.service /etc/systemd/system/
 # Edit the file if your username isn't "ubuntu"
@@ -90,6 +94,7 @@ systemctl start wornwear-bot
 ```
 
 ### 5. Check it's running
+
 ```bash
 systemctl status wornwear-bot
 journalctl -u wornwear-bot -f    # live log stream
@@ -132,3 +137,19 @@ KEYWORDS=r1,full-zip               # targets R1 full-zips only
   changes their site markup.
 - seen_items.json prevents re-alerting on the same items across restarts.
 - Logs are written to bot.log and also to systemd journal on a VPS.
+
+## Useful Commands
+
+| Task                     | Command                                            |
+| ------------------------ | -------------------------------------------------- |
+| Watch live logs          | `journalctl -u wornwear-bot -f`                    |
+| Check bot status         | `systemctl status wornwear-bot`                    |
+| Check memory             | `free -m`                                          |
+| Restart everything       | `systemctl restart xvfb x11vnc novnc wornwear-bot` |
+| Restart wornwear-bot     | `systemctl restart wornwear-bot`                   |
+| Stop bot only            | `systemctl stop wornwear-bot`                      |
+| Check all service status | `systemctl status xvfb x11vnc novnc wornwear-bot`  |
+| Check VNC is listening   | `ss -tlnp \| grep 5900`                            |
+| Check noVNC is listening | `ss -tlnp \| grep 6080`                            |
+
+---

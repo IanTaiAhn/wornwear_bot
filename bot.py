@@ -74,9 +74,9 @@ CLEAR_TIMESTAMP_FILE = "last_cleared.txt"
 CLEAR_INTERVAL_HOURS = 24
 
 # How long to wait after each scroll before checking if new products loaded
-SCROLL_PAUSE_MS = 2500
+SCROLL_PAUSE_MS = 4000
 # Give up scrolling after this many consecutive scrolls with no new products
-SCROLL_MAX_STALE = 3
+SCROLL_MAX_STALE = 8
 
 TARGET_URLS = [
     "https://wornwear.patagonia.com/collections/just-added",
