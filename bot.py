@@ -33,6 +33,7 @@ import logging
 import os
 import random
 import re
+import time
 
 from dotenv import load_dotenv
 from playwright.async_api import BrowserContext, Page, async_playwright
@@ -69,6 +70,8 @@ USE_VNC       = os.getenv("USE_VNC", "false").lower() == "true"
 DROPLET_IP    = os.getenv("DROPLET_IP", "")
 
 STATE_FILE   = "seen_items.json"
+CLEAR_TIMESTAMP_FILE = "last_cleared.txt"
+CLEAR_INTERVAL_HOURS = 24
 
 # How long to wait after each scroll before checking if new products loaded
 SCROLL_PAUSE_MS = 2500
@@ -94,7 +97,31 @@ ADD_TO_CART_SELECTORS = [
 
 # ── State persistence ─────────────────────────────────────────────────────────
 
+def should_clear_seen() -> bool:
+    """Check if 24 hours have passed since last clear."""
+    if not os.path.exists(CLEAR_TIMESTAMP_FILE):
+        return True
+
+    try:
+        with open(CLEAR_TIMESTAMP_FILE) as f:
+            last_cleared = float(f.read().strip())
+        hours_since_clear = (time.time() - last_cleared) / 3600
+        return hours_since_clear >= CLEAR_INTERVAL_HOURS
+    except Exception:
+        return True
+
+def mark_cleared():
+    """Record current time as last clear timestamp."""
+    with open(CLEAR_TIMESTAMP_FILE, "w") as f:
+        f.write(str(time.time()))
+
 def load_seen() -> set:
+    # Check if we should clear seen items (every 24 hours)
+    if should_clear_seen():
+        log.info(f"⏰ {CLEAR_INTERVAL_HOURS}h passed — clearing seen items to catch re-listed products")
+        mark_cleared()
+        return set()
+
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE) as f:
             return set(json.load(f))
