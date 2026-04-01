@@ -6,6 +6,8 @@ numbers, then optionally adds to cart when found.
 Includes:
   - Scroll-based "load more" to fetch the full catalog (not just first 24)
   - Style number matching (checks individual product pages for style #)
+  - Per-click product harvesting to catch items that rotate OUT of the DOM
+    once the ~577-item display cap is hit (confirmed via test_pagination.py)
 
 Requirements:
     uv sync
@@ -139,11 +141,19 @@ async def notify(title: str, body: str):
         return
     try:
         import httpx
+        # Ensure strings are properly encoded as UTF-8
+        body_bytes = body.encode('utf-8')
+        headers = {
+            "Title": title,
+            "Priority": "high",
+            "Tags": "shopping",
+            "Content-Type": "text/plain; charset=utf-8",
+        }
         async with httpx.AsyncClient() as client:
             await client.post(
                 NOTIFY_URL,
-                content=body,
-                headers={"Title": title, "Priority": "high", "Tags": "shopping"},
+                content=body_bytes,
+                headers=headers,
                 timeout=10,
             )
         log.info(f"Notification sent: {title}")
@@ -157,14 +167,14 @@ async def cart_expiry_warning(title: str, url: str, delay_seconds: int = 1500):
 
     novnc_url = f"http://{DROPLET_IP}:6080/vnc.html?autoconnect=true" if DROPLET_IP and USE_VNC else ""
 
-    warning_body = f"{title} — cart expires in 5 minutes!\n"
+    warning_body = f"{title} - cart expires in 5 minutes!\n"
     if novnc_url:
-        warning_body += f"\n🖥️ Checkout now:\n{novnc_url}"
+        warning_body += f"\nCheckout now:\n{novnc_url}"
     else:
         warning_body += f"\n{url}"
 
     await notify(
-        title="⚠️ Cart expiring in 5 minutes!",
+        title="Cart expiring in 5 minutes!",
         body=warning_body,
     )
 
@@ -200,12 +210,62 @@ def style_number_match(product_url: str) -> tuple[bool, str]:
     return False, ""
 
 
-# ── Listing scraper with scroll-to-load-more ──────────────────────────────────
+# ── JS snippets ───────────────────────────────────────────────────────────────
+
+# Count of unique product URLs currently visible in the DOM
+_COUNT_JS = """
+    () => new Set(
+        Array.from(document.querySelectorAll('a[href*="/products/"]'))
+            .map(a => a.href)
+    ).size
+"""
+
+# Extract every product visible in the DOM right now
+_EXTRACT_JS = """
+    () => {
+        const seen = new Set();
+        const links = Array.from(document.querySelectorAll('a[href*="/products/"]'))
+            .filter(a => {
+                if (seen.has(a.href)) return false;
+                seen.add(a.href);
+                return true;
+            });
+        return links.map(link => {
+            const parent = link.closest(
+                'div[class*="product"], div[class*="card"], li, article'
+            ) || link.parentElement;
+            const priceEl = parent?.querySelector(
+                '[class*="price"], .price, [class*="Price"]'
+            );
+            return {
+                title: link.innerText?.trim() ||
+                       link.querySelector('h1,h2,h3,h4,p')?.innerText?.trim() || '',
+                price: priceEl?.innerText?.trim() || '',
+                url:   link.href,
+                id:    link.href.split('/').pop()
+            };
+        }).filter(p => p.title && p.url);
+    }
+"""
+
+
+# ── Listing scraper with per-click harvesting ─────────────────────────────────
 
 async def scrape_all_products(page: Page, url: str) -> list[dict]:
     """
-    Navigate to a listing page and scroll until no new products load,
-    collecting the full catalog rather than just the initial 24.
+    Navigate to a listing page, click Load More until the full catalog is
+    exhausted, and return every unique product seen.
+
+    WHY PER-CLICK HARVESTING:
+    The Worn Wear site caps the visible DOM at ~577 items. Once that ceiling
+    is hit, each Load More click rotates NEW products IN while pushing older
+    ones OUT of the DOM. If we only read the DOM at the end of pagination we
+    silently miss everything that has already been evicted. Testing confirmed
+    77+ products were missed in a single session using the old approach.
+
+    FIX: we snapshot the DOM at every Load More click and accumulate products
+    into `all_products` (keyed by URL) throughout the session. Anything that
+    disappears from the DOM mid-session is already safely stored.
     """
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
@@ -214,87 +274,106 @@ async def scrape_all_products(page: Page, url: str) -> list[dict]:
         log.warning(f"Failed to load {url}: {e}")
         return []
 
+    # Accumulator: url → product dict. Persists across the whole session so
+    # products evicted from the DOM are not lost.
+    all_products: dict[str, dict] = {}
+
+    async def harvest():
+        """Snapshot current DOM products into all_products."""
+        products = await page.evaluate(_EXTRACT_JS)
+        new_count = 0
+        for p in products:
+            if p["url"] not in all_products:
+                all_products[p["url"]] = p
+                new_count += 1
+        return new_count
+
+    # Initial harvest before any clicking
+    await harvest()
+
     stale_count  = 0
-    last_count   = 0
+    last_count   = await page.evaluate(_COUNT_JS)
     scroll_round = 0
+
+    LOAD_MORE_SELECTORS = [
+        "button:has-text('Load More')",
+        "button:has-text('Show More')",
+        "button:has-text('View More')",
+        "[class*='load-more']",
+        "[class*='LoadMore']",
+    ]
+
+    # How many consecutive clicks with zero new *unique* products before we stop.
+    # We use a separate stale counter for unique products so that DOM-capped
+    # rotation clicks (DOM flat, but new uniques still appearing) keep running.
+    unique_stale = 0
+    UNIQUE_STALE_LIMIT = 3
 
     while stale_count < SCROLL_MAX_STALE:
         scroll_round += 1
 
-        # Scroll to the very bottom of the page
+        # Scroll to bottom (helps trigger lazy-load and brings the button into view)
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await page.wait_for_timeout(SCROLL_PAUSE_MS)
 
-        # Also try clicking a "Load More" button if one exists
-        for load_more_sel in [
-            "button:has-text('Load More')",
-            "button:has-text('Show More')",
-            "button:has-text('View More')",
-            "[class*='load-more']",
-            "[class*='LoadMore']",
-        ]:
+        # Try clicking a Load More button
+        clicked = False
+        for load_more_sel in LOAD_MORE_SELECTORS:
             try:
                 btn = page.locator(load_more_sel).first
                 if await btn.is_visible(timeout=800) and await btn.is_enabled(timeout=800):
                     log.info(f"  Clicking load-more button: {load_more_sel}")
                     await btn.click()
                     await page.wait_for_timeout(SCROLL_PAUSE_MS)
+                    clicked = True
                     break
             except Exception:
                 continue
 
-        # Count how many product links are currently in the DOM
-        current_count = await page.evaluate("""
-            () => new Set(
-                Array.from(document.querySelectorAll('a[href*="/products/"]'))
-                    .map(a => a.href)
-            ).size
-        """)
+        current_dom_count = await page.evaluate(_COUNT_JS)
 
-        if current_count > last_count:
-            log.info(f"  Scroll {scroll_round}: {last_count} -> {current_count} products")
-            last_count  = current_count
-            stale_count = 0
-        else:
-            stale_count += 1
+        # ── Harvest after every click/scroll ──────────────────────────────────
+        new_unique = await harvest()
+
+        if current_dom_count > last_count:
+            # DOM is still growing — normal phase (clicks 1-23 in testing)
             log.info(
-                f"  Scroll {scroll_round}: still {current_count} products "
-                f"(stale {stale_count}/{SCROLL_MAX_STALE})"
+                f"  Scroll {scroll_round}: DOM {last_count} -> {current_dom_count} "
+                f"| total unique harvested: {len(all_products)} (+{new_unique} new)"
             )
+            last_count   = current_dom_count
+            stale_count  = 0
+            unique_stale = 0
 
-    log.info(f"  Pagination complete: {last_count} unique product URLs found")
+        elif new_unique > 0:
+            # DOM is capped but new products are rotating in — keep going
+            log.info(
+                f"  Scroll {scroll_round}: DOM capped at {current_dom_count} "
+                f"| +{new_unique} new unique | total harvested: {len(all_products)}"
+            )
+            stale_count  = 0   # don't stop just because the DOM count is flat
+            unique_stale = 0
 
-    # Extract full product list now that everything is loaded
-    products = await page.evaluate("""
-        () => {
-            // Deduplicate by href
-            const seen = new Set();
-            const links = Array.from(document.querySelectorAll('a[href*="/products/"]'))
-                .filter(a => {
-                    if (seen.has(a.href)) return false;
-                    seen.add(a.href);
-                    return true;
-                });
+        else:
+            # Neither DOM nor unique set grew
+            stale_count  += 1
+            unique_stale += 1
+            log.info(
+                f"  Scroll {scroll_round}: no growth "
+                f"(dom stale {stale_count}/{SCROLL_MAX_STALE}, "
+                f"unique stale {unique_stale}/{UNIQUE_STALE_LIMIT}) "
+                f"| total harvested: {len(all_products)}"
+            )
+            if unique_stale >= UNIQUE_STALE_LIMIT:
+                log.info("  Catalog fully exhausted — stopping pagination.")
+                break
 
-            return links.map(link => {
-                const parent = link.closest(
-                    'div[class*="product"], div[class*="card"], li, article'
-                ) || link.parentElement;
-                const priceEl = parent?.querySelector(
-                    '[class*="price"], .price, [class*="Price"]'
-                );
-                return {
-                    title: link.innerText?.trim() ||
-                           link.querySelector('h1,h2,h3,h4,p')?.innerText?.trim() || '',
-                    price: priceEl?.innerText?.trim() || '',
-                    url:   link.href,
-                    id:    link.href.split('/').pop()
-                };
-            }).filter(p => p.title && p.url);
-        }
-    """)
+    log.info(
+        f"  Pagination complete: {len(all_products)} unique products harvested "
+        f"(DOM showed {current_dom_count} at end)"
+    )
 
-    return products
+    return list(all_products.values())
 
 
 # ── Add to cart ───────────────────────────────────────────────────────────────
@@ -305,34 +384,85 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
         await page.goto(product_url, wait_until="domcontentloaded", timeout=30_000)
         await page.wait_for_timeout(random.randint(1500, 3000))
 
-        size_clicked = False
+        # Get all available color options
+        color_inputs = []
+        try:
+            color_inputs = await page.evaluate("""
+                () => Array.from(
+                    document.querySelectorAll('input[name="color-option"], input[type="radio"][class*="color"], [data-color-option]')
+                ).map(i => ({ value: i.value, id: i.id, name: i.getAttribute('data-color') || i.value }))
+            """)
+            if color_inputs:
+                log.info(f"Color options: {[c['name'] for c in color_inputs]}")
+            else:
+                log.info("No color options found - item may have single color")
+        except Exception as e:
+            log.warning(f"Color detection error: {e}")
+
+        # Get all available size options
+        size_inputs = []
         try:
             size_inputs = await page.evaluate("""
                 () => Array.from(
                     document.querySelectorAll('input[name="size-option"]')
                 ).map(i => ({ value: i.value, id: i.id }))
             """)
-            log.info(f"Size options: {[s['value'] for s in size_inputs]}")
-
-            for size in size_inputs:
-                label = page.locator(f"label[for='{size['id']}']").first
-                try:
-                    await label.click(timeout=2000)
-                    await page.wait_for_timeout(800)
-                    is_checked = await page.evaluate(
-                        f"() => document.getElementById('{size['id']}').checked"
-                    )
-                    if is_checked:
-                        log.info(f"Selected size: '{size['value']}'")
-                        size_clicked = True
-                        break
-                except Exception:
-                    continue
+            if size_inputs:
+                log.info(f"Size options: {[s['value'] for s in size_inputs]}")
+            else:
+                log.info("No size options found - item may be one-size")
         except Exception as e:
-            log.warning(f"Size selection error: {e}")
+            log.warning(f"Size detection error: {e}")
 
-        if not size_clicked:
-            log.warning("Could not select any size — may all be sold out.")
+        # If no colors found, treat as single color (proceed with sizes only)
+        if not color_inputs:
+            color_inputs = [{"value": "default", "id": None, "name": "default"}]
+
+        # If no sizes found, treat as one-size (proceed with colors only)
+        if not size_inputs:
+            size_inputs = [{"value": "one-size", "id": None}]
+
+        selection_success = False
+
+        # Cycle through colors first, then sizes for each color
+        for color in color_inputs:
+            if color['id']:  # Only try to click if there's an actual color option
+                try:
+                    color_label = page.locator(f"label[for='{color['id']}']").first
+                    await color_label.click(timeout=2000)
+                    await page.wait_for_timeout(500)
+                    log.info(f"Trying color: '{color['name']}'")
+                except Exception as e:
+                    log.warning(f"Failed to select color '{color['name']}': {e}")
+                    continue
+
+            # For this color, try each size
+            for size in size_inputs:
+                if size['id']:  # Only try to click if there's an actual size option
+                    try:
+                        size_label = page.locator(f"label[for='{size['id']}']").first
+                        await size_label.click(timeout=2000)
+                        await page.wait_for_timeout(800)
+                        is_checked = await page.evaluate(
+                            f"() => document.getElementById('{size['id']}').checked"
+                        )
+                        if is_checked:
+                            log.info(f"Selected color: '{color['name']}', size: '{size['value']}'")
+                            selection_success = True
+                            break
+                    except Exception as e:
+                        log.warning(f"Failed to select size '{size['value']}' for color '{color['name']}': {e}")
+                        continue
+                else:
+                    # No size selection needed (one-size item)
+                    selection_success = True
+                    break
+
+            if selection_success:
+                break
+
+        if not selection_success:
+            log.warning("Could not select any valid color/size combination — may all be sold out.")
 
         for sel in ADD_TO_CART_SELECTORS:
             try:
@@ -340,9 +470,47 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
                 if await btn.is_visible(timeout=1500) and await btn.is_enabled(timeout=1500):
                     log.info(f"Clicking add-to-cart via: {sel}")
                     await btn.click()
-                    await page.wait_for_timeout(2500)
+                    await page.wait_for_timeout(3000)
+
+                    # Verify the item was actually added by checking for success indicators
+                    success_indicators = [
+                        "text=Added to cart",
+                        "text=Added to bag",
+                        "text=Item added",
+                        "[class*='cart-success']",
+                        "[class*='added-confirmation']",
+                    ]
+
+                    for indicator in success_indicators:
+                        try:
+                            if await page.locator(indicator).is_visible(timeout=2000):
+                                log.info(f"Verified: item added successfully (found: {indicator})")
+                                return True
+                        except Exception:
+                            continue
+
+                    # Check for error messages that indicate failure
+                    error_indicators = [
+                        "text=Out of stock",
+                        "text=Sold out",
+                        "text=Not available",
+                        "text=Select a size",
+                        "[class*='error']",
+                    ]
+
+                    for error in error_indicators:
+                        try:
+                            if await page.locator(error).is_visible(timeout=1000):
+                                log.warning(f"Add to cart failed: {error} message detected")
+                                return False
+                        except Exception:
+                            continue
+
+                    # If no clear success/error indicator, assume it worked (optimistic)
+                    log.info("No clear success indicator found, but no errors either - assuming success")
                     return True
-            except Exception:
+            except Exception as e:
+                log.warning(f"Exception clicking add-to-cart with {sel}: {e}")
                 continue
 
         log.warning("No visible/enabled Add to Cart button found.")
@@ -398,10 +566,17 @@ async def run():
         while True:
             poll_count += 1
 
+            # Check if we should clear seen items (every 24 hours while running)
+            if should_clear_seen():
+                log.info(f"⏰ {CLEAR_INTERVAL_HOURS}h passed — clearing seen items to catch re-listed products")
+                mark_cleared()
+                seen.clear()  # Clear the in-memory set
+                save_seen(seen)  # Persist the empty set
+
             for url in TARGET_URLS:
                 log.info(f"Checking {url} …")
                 products = await scrape_all_products(page, url)
-                log.info(f"  Total products after full scroll: {len(products)}")
+                log.info(f"  Total unique products harvested: {len(products)}")
 
                 for product in products:
                     pid   = product.get("id") or product.get("url")
@@ -436,7 +611,7 @@ async def run():
                     novnc_url = f"http://{DROPLET_IP}:6080/vnc.html?autoconnect=true" if DROPLET_IP and USE_VNC else ""
 
                     notification_body = (
-                        f"{title} — {product.get('price', '')}\n"
+                        f"{title} - {product.get('price', '')}\n"
                         f"Matched: {', '.join(match_reason)}\n"
                         f"{product.get('url', '')}"
                     )
@@ -446,12 +621,12 @@ async def run():
                         success = await add_to_cart(page, product["url"])
 
                         if success:
-                            notification_body += "\n\n✅ Item bagged! You have 30 minutes."
+                            notification_body += "\n\nItem bagged! You have 30 minutes."
                             if novnc_url:
-                                notification_body += f"\n\n🖥️ Complete checkout here:\n{novnc_url}"
+                                notification_body += f"\n\nComplete checkout here:\n{novnc_url}"
 
                             await notify(
-                                title="🎯 Worn Wear — Item Bagged!",
+                                title="Worn Wear - Item Bagged!",
                                 body=notification_body,
                             )
 
@@ -459,9 +634,9 @@ async def run():
                             asyncio.create_task(cart_expiry_warning(title, product.get("url", "")))
                         else:
                             await notify(
-                                title="⚠️ Add to Cart Failed",
+                                title="Add to Cart Failed",
                                 body=(
-                                    f"Found {title} but couldn't add to cart — check logs.\n"
+                                    f"Found {title} but couldn't add to cart - check logs.\n"
                                     f"{product.get('url', '')}"
                                 ),
                             )
