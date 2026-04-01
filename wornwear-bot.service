@@ -40,25 +40,3 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-
-# ───────────────────────────────────────────────────────────────────────────────
-# FOR UBUNTU USER (comment out the above, uncomment below):
-# ───────────────────────────────────────────────────────────────────────────────
-#
-# [Unit]
-# Description=Worn Wear Monitor Bot
-# After=network-online.target
-# Wants=network-online.target
-#
-# [Service]
-# Type=simple
-# User=ubuntu
-# WorkingDirectory=/home/ubuntu/wornwear-bot
-# ExecStart=/home/ubuntu/.local/bin/uv run python bot.py
-# Restart=always
-# RestartSec=10
-# StandardOutput=journal
-# StandardError=journal
-#
-# [Install]
-# WantedBy=multi-user.target

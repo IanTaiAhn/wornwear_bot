@@ -1,5 +1,3 @@
-# WINNER WINNER CHIK'N DINNER
-
 # noVNC Remote Browser — Implementation Guide
 
 Get the Worn Wear bot's Chromium browser accessible from your phone so you can

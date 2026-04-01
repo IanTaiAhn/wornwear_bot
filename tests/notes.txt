@@ -1,0 +1,2 @@
+Some of these test files are old, and may not run right out of the gate. Also, they will need to be run from the project root if you do want to run them.
+I'd suggest running bot.py with the flags it has instead of these files, but I'm keeping them for history.
