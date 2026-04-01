@@ -469,6 +469,13 @@ async def run():
         while True:
             poll_count += 1
 
+            # Check if we should clear seen items (every 24 hours while running)
+            if should_clear_seen():
+                log.info(f"⏰ {CLEAR_INTERVAL_HOURS}h passed — clearing seen items to catch re-listed products")
+                mark_cleared()
+                seen.clear()  # Clear the in-memory set
+                save_seen(seen)  # Persist the empty set
+
             for url in TARGET_URLS:
                 log.info(f"Checking {url} …")
                 products = await scrape_all_products(page, url)
