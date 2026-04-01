@@ -384,34 +384,85 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
         await page.goto(product_url, wait_until="domcontentloaded", timeout=30_000)
         await page.wait_for_timeout(random.randint(1500, 3000))
 
-        size_clicked = False
+        # Get all available color options
+        color_inputs = []
+        try:
+            color_inputs = await page.evaluate("""
+                () => Array.from(
+                    document.querySelectorAll('input[name="color-option"], input[type="radio"][class*="color"], [data-color-option]')
+                ).map(i => ({ value: i.value, id: i.id, name: i.getAttribute('data-color') || i.value }))
+            """)
+            if color_inputs:
+                log.info(f"Color options: {[c['name'] for c in color_inputs]}")
+            else:
+                log.info("No color options found - item may have single color")
+        except Exception as e:
+            log.warning(f"Color detection error: {e}")
+
+        # Get all available size options
+        size_inputs = []
         try:
             size_inputs = await page.evaluate("""
                 () => Array.from(
                     document.querySelectorAll('input[name="size-option"]')
                 ).map(i => ({ value: i.value, id: i.id }))
             """)
-            log.info(f"Size options: {[s['value'] for s in size_inputs]}")
-
-            for size in size_inputs:
-                label = page.locator(f"label[for='{size['id']}']").first
-                try:
-                    await label.click(timeout=2000)
-                    await page.wait_for_timeout(800)
-                    is_checked = await page.evaluate(
-                        f"() => document.getElementById('{size['id']}').checked"
-                    )
-                    if is_checked:
-                        log.info(f"Selected size: '{size['value']}'")
-                        size_clicked = True
-                        break
-                except Exception:
-                    continue
+            if size_inputs:
+                log.info(f"Size options: {[s['value'] for s in size_inputs]}")
+            else:
+                log.info("No size options found - item may be one-size")
         except Exception as e:
-            log.warning(f"Size selection error: {e}")
+            log.warning(f"Size detection error: {e}")
 
-        if not size_clicked:
-            log.warning("Could not select any size — may all be sold out.")
+        # If no colors found, treat as single color (proceed with sizes only)
+        if not color_inputs:
+            color_inputs = [{"value": "default", "id": None, "name": "default"}]
+
+        # If no sizes found, treat as one-size (proceed with colors only)
+        if not size_inputs:
+            size_inputs = [{"value": "one-size", "id": None}]
+
+        selection_success = False
+
+        # Cycle through colors first, then sizes for each color
+        for color in color_inputs:
+            if color['id']:  # Only try to click if there's an actual color option
+                try:
+                    color_label = page.locator(f"label[for='{color['id']}']").first
+                    await color_label.click(timeout=2000)
+                    await page.wait_for_timeout(500)
+                    log.info(f"Trying color: '{color['name']}'")
+                except Exception as e:
+                    log.warning(f"Failed to select color '{color['name']}': {e}")
+                    continue
+
+            # For this color, try each size
+            for size in size_inputs:
+                if size['id']:  # Only try to click if there's an actual size option
+                    try:
+                        size_label = page.locator(f"label[for='{size['id']}']").first
+                        await size_label.click(timeout=2000)
+                        await page.wait_for_timeout(800)
+                        is_checked = await page.evaluate(
+                            f"() => document.getElementById('{size['id']}').checked"
+                        )
+                        if is_checked:
+                            log.info(f"Selected color: '{color['name']}', size: '{size['value']}'")
+                            selection_success = True
+                            break
+                    except Exception as e:
+                        log.warning(f"Failed to select size '{size['value']}' for color '{color['name']}': {e}")
+                        continue
+                else:
+                    # No size selection needed (one-size item)
+                    selection_success = True
+                    break
+
+            if selection_success:
+                break
+
+        if not selection_success:
+            log.warning("Could not select any valid color/size combination — may all be sold out.")
 
         for sel in ADD_TO_CART_SELECTORS:
             try:
@@ -419,9 +470,47 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
                 if await btn.is_visible(timeout=1500) and await btn.is_enabled(timeout=1500):
                     log.info(f"Clicking add-to-cart via: {sel}")
                     await btn.click()
-                    await page.wait_for_timeout(2500)
+                    await page.wait_for_timeout(3000)
+
+                    # Verify the item was actually added by checking for success indicators
+                    success_indicators = [
+                        "text=Added to cart",
+                        "text=Added to bag",
+                        "text=Item added",
+                        "[class*='cart-success']",
+                        "[class*='added-confirmation']",
+                    ]
+
+                    for indicator in success_indicators:
+                        try:
+                            if await page.locator(indicator).is_visible(timeout=2000):
+                                log.info(f"Verified: item added successfully (found: {indicator})")
+                                return True
+                        except Exception:
+                            continue
+
+                    # Check for error messages that indicate failure
+                    error_indicators = [
+                        "text=Out of stock",
+                        "text=Sold out",
+                        "text=Not available",
+                        "text=Select a size",
+                        "[class*='error']",
+                    ]
+
+                    for error in error_indicators:
+                        try:
+                            if await page.locator(error).is_visible(timeout=1000):
+                                log.warning(f"Add to cart failed: {error} message detected")
+                                return False
+                        except Exception:
+                            continue
+
+                    # If no clear success/error indicator, assume it worked (optimistic)
+                    log.info("No clear success indicator found, but no errors either - assuming success")
                     return True
-            except Exception:
+            except Exception as e:
+                log.warning(f"Exception clicking add-to-cart with {sel}: {e}")
                 continue
 
         log.warning("No visible/enabled Add to Cart button found.")
