@@ -6,6 +6,8 @@ numbers, then optionally adds to cart when found.
 Includes:
   - Scroll-based "load more" to fetch the full catalog (not just first 24)
   - Style number matching (checks individual product pages for style #)
+  - Per-click product harvesting to catch items that rotate OUT of the DOM
+    once the ~577-item display cap is hit (confirmed via test_pagination.py)
 
 Requirements:
     uv sync
@@ -200,12 +202,62 @@ def style_number_match(product_url: str) -> tuple[bool, str]:
     return False, ""
 
 
-# ── Listing scraper with scroll-to-load-more ──────────────────────────────────
+# ── JS snippets ───────────────────────────────────────────────────────────────
+
+# Count of unique product URLs currently visible in the DOM
+_COUNT_JS = """
+    () => new Set(
+        Array.from(document.querySelectorAll('a[href*="/products/"]'))
+            .map(a => a.href)
+    ).size
+"""
+
+# Extract every product visible in the DOM right now
+_EXTRACT_JS = """
+    () => {
+        const seen = new Set();
+        const links = Array.from(document.querySelectorAll('a[href*="/products/"]'))
+            .filter(a => {
+                if (seen.has(a.href)) return false;
+                seen.add(a.href);
+                return true;
+            });
+        return links.map(link => {
+            const parent = link.closest(
+                'div[class*="product"], div[class*="card"], li, article'
+            ) || link.parentElement;
+            const priceEl = parent?.querySelector(
+                '[class*="price"], .price, [class*="Price"]'
+            );
+            return {
+                title: link.innerText?.trim() ||
+                       link.querySelector('h1,h2,h3,h4,p')?.innerText?.trim() || '',
+                price: priceEl?.innerText?.trim() || '',
+                url:   link.href,
+                id:    link.href.split('/').pop()
+            };
+        }).filter(p => p.title && p.url);
+    }
+"""
+
+
+# ── Listing scraper with per-click harvesting ─────────────────────────────────
 
 async def scrape_all_products(page: Page, url: str) -> list[dict]:
     """
-    Navigate to a listing page and scroll until no new products load,
-    collecting the full catalog rather than just the initial 24.
+    Navigate to a listing page, click Load More until the full catalog is
+    exhausted, and return every unique product seen.
+
+    WHY PER-CLICK HARVESTING:
+    The Worn Wear site caps the visible DOM at ~577 items. Once that ceiling
+    is hit, each Load More click rotates NEW products IN while pushing older
+    ones OUT of the DOM. If we only read the DOM at the end of pagination we
+    silently miss everything that has already been evicted. Testing confirmed
+    77+ products were missed in a single session using the old approach.
+
+    FIX: we snapshot the DOM at every Load More click and accumulate products
+    into `all_products` (keyed by URL) throughout the session. Anything that
+    disappears from the DOM mid-session is already safely stored.
     """
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
@@ -214,87 +266,106 @@ async def scrape_all_products(page: Page, url: str) -> list[dict]:
         log.warning(f"Failed to load {url}: {e}")
         return []
 
+    # Accumulator: url → product dict. Persists across the whole session so
+    # products evicted from the DOM are not lost.
+    all_products: dict[str, dict] = {}
+
+    async def harvest():
+        """Snapshot current DOM products into all_products."""
+        products = await page.evaluate(_EXTRACT_JS)
+        new_count = 0
+        for p in products:
+            if p["url"] not in all_products:
+                all_products[p["url"]] = p
+                new_count += 1
+        return new_count
+
+    # Initial harvest before any clicking
+    await harvest()
+
     stale_count  = 0
-    last_count   = 0
+    last_count   = await page.evaluate(_COUNT_JS)
     scroll_round = 0
+
+    LOAD_MORE_SELECTORS = [
+        "button:has-text('Load More')",
+        "button:has-text('Show More')",
+        "button:has-text('View More')",
+        "[class*='load-more']",
+        "[class*='LoadMore']",
+    ]
+
+    # How many consecutive clicks with zero new *unique* products before we stop.
+    # We use a separate stale counter for unique products so that DOM-capped
+    # rotation clicks (DOM flat, but new uniques still appearing) keep running.
+    unique_stale = 0
+    UNIQUE_STALE_LIMIT = 3
 
     while stale_count < SCROLL_MAX_STALE:
         scroll_round += 1
 
-        # Scroll to the very bottom of the page
+        # Scroll to bottom (helps trigger lazy-load and brings the button into view)
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await page.wait_for_timeout(SCROLL_PAUSE_MS)
 
-        # Also try clicking a "Load More" button if one exists
-        for load_more_sel in [
-            "button:has-text('Load More')",
-            "button:has-text('Show More')",
-            "button:has-text('View More')",
-            "[class*='load-more']",
-            "[class*='LoadMore']",
-        ]:
+        # Try clicking a Load More button
+        clicked = False
+        for load_more_sel in LOAD_MORE_SELECTORS:
             try:
                 btn = page.locator(load_more_sel).first
                 if await btn.is_visible(timeout=800) and await btn.is_enabled(timeout=800):
                     log.info(f"  Clicking load-more button: {load_more_sel}")
                     await btn.click()
                     await page.wait_for_timeout(SCROLL_PAUSE_MS)
+                    clicked = True
                     break
             except Exception:
                 continue
 
-        # Count how many product links are currently in the DOM
-        current_count = await page.evaluate("""
-            () => new Set(
-                Array.from(document.querySelectorAll('a[href*="/products/"]'))
-                    .map(a => a.href)
-            ).size
-        """)
+        current_dom_count = await page.evaluate(_COUNT_JS)
 
-        if current_count > last_count:
-            log.info(f"  Scroll {scroll_round}: {last_count} -> {current_count} products")
-            last_count  = current_count
-            stale_count = 0
-        else:
-            stale_count += 1
+        # ── Harvest after every click/scroll ──────────────────────────────────
+        new_unique = await harvest()
+
+        if current_dom_count > last_count:
+            # DOM is still growing — normal phase (clicks 1-23 in testing)
             log.info(
-                f"  Scroll {scroll_round}: still {current_count} products "
-                f"(stale {stale_count}/{SCROLL_MAX_STALE})"
+                f"  Scroll {scroll_round}: DOM {last_count} -> {current_dom_count} "
+                f"| total unique harvested: {len(all_products)} (+{new_unique} new)"
             )
+            last_count   = current_dom_count
+            stale_count  = 0
+            unique_stale = 0
 
-    log.info(f"  Pagination complete: {last_count} unique product URLs found")
+        elif new_unique > 0:
+            # DOM is capped but new products are rotating in — keep going
+            log.info(
+                f"  Scroll {scroll_round}: DOM capped at {current_dom_count} "
+                f"| +{new_unique} new unique | total harvested: {len(all_products)}"
+            )
+            stale_count  = 0   # don't stop just because the DOM count is flat
+            unique_stale = 0
 
-    # Extract full product list now that everything is loaded
-    products = await page.evaluate("""
-        () => {
-            // Deduplicate by href
-            const seen = new Set();
-            const links = Array.from(document.querySelectorAll('a[href*="/products/"]'))
-                .filter(a => {
-                    if (seen.has(a.href)) return false;
-                    seen.add(a.href);
-                    return true;
-                });
+        else:
+            # Neither DOM nor unique set grew
+            stale_count  += 1
+            unique_stale += 1
+            log.info(
+                f"  Scroll {scroll_round}: no growth "
+                f"(dom stale {stale_count}/{SCROLL_MAX_STALE}, "
+                f"unique stale {unique_stale}/{UNIQUE_STALE_LIMIT}) "
+                f"| total harvested: {len(all_products)}"
+            )
+            if unique_stale >= UNIQUE_STALE_LIMIT:
+                log.info("  Catalog fully exhausted — stopping pagination.")
+                break
 
-            return links.map(link => {
-                const parent = link.closest(
-                    'div[class*="product"], div[class*="card"], li, article'
-                ) || link.parentElement;
-                const priceEl = parent?.querySelector(
-                    '[class*="price"], .price, [class*="Price"]'
-                );
-                return {
-                    title: link.innerText?.trim() ||
-                           link.querySelector('h1,h2,h3,h4,p')?.innerText?.trim() || '',
-                    price: priceEl?.innerText?.trim() || '',
-                    url:   link.href,
-                    id:    link.href.split('/').pop()
-                };
-            }).filter(p => p.title && p.url);
-        }
-    """)
+    log.info(
+        f"  Pagination complete: {len(all_products)} unique products harvested "
+        f"(DOM showed {current_dom_count} at end)"
+    )
 
-    return products
+    return list(all_products.values())
 
 
 # ── Add to cart ───────────────────────────────────────────────────────────────
@@ -401,7 +472,7 @@ async def run():
             for url in TARGET_URLS:
                 log.info(f"Checking {url} …")
                 products = await scrape_all_products(page, url)
-                log.info(f"  Total products after full scroll: {len(products)}")
+                log.info(f"  Total unique products harvested: {len(products)}")
 
                 for product in products:
                     pid   = product.get("id") or product.get("url")
