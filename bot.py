@@ -44,13 +44,23 @@ load_dotenv()
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 import sys
+from logging.handlers import RotatingFileHandler
+
+# Set up rotating log handler: max 10 MB per file, keep 3 backups (30 MB total max)
+file_handler = RotatingFileHandler(
+    "bot.log",
+    maxBytes=10 * 1024 * 1024,  # 10 MB
+    backupCount=3,               # Keep bot.log.1, bot.log.2, bot.log.3
+    encoding="utf-8",
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(stream=open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1)),
-        logging.FileHandler("bot.log", encoding="utf-8"),
+        file_handler,
     ],
 )
 log = logging.getLogger("wornwear-bot")
@@ -558,7 +568,6 @@ async def run():
             viewport={"width": 1280, "height": 800},
             locale="en-US",
         )
-        page = await context.new_page()
 
         poll_count = 0
 
@@ -566,89 +575,99 @@ async def run():
         while True:
             poll_count += 1
 
-            # Check if we should clear seen items (every 24 hours while running)
-            if should_clear_seen():
-                log.info(f"⏰ {CLEAR_INTERVAL_HOURS}h passed — clearing seen items to catch re-listed products")
-                mark_cleared()
-                seen.clear()  # Clear the in-memory set
-                save_seen(seen)  # Persist the empty set
+            # Create a fresh page for this poll cycle to prevent memory accumulation
+            page = await context.new_page()
+            log.info(f"Poll #{poll_count} - created fresh page to manage memory")
 
-            for url in TARGET_URLS:
-                log.info(f"Checking {url} …")
-                products = await scrape_all_products(page, url)
-                log.info(f"  Total unique products harvested: {len(products)}")
+            try:
+                # Check if we should clear seen items (every 24 hours while running)
+                if should_clear_seen():
+                    log.info(f"⏰ {CLEAR_INTERVAL_HOURS}h passed — clearing seen items to catch re-listed products")
+                    mark_cleared()
+                    seen.clear()  # Clear the in-memory set
+                    save_seen(seen)  # Persist the empty set
 
-                for product in products:
-                    pid   = product.get("id") or product.get("url")
-                    title = product.get("title", "")
+                for url in TARGET_URLS:
+                    log.info(f"Checking {url} …")
+                    products = await scrape_all_products(page, url)
+                    log.info(f"  Total unique products harvested: {len(products)}")
 
-                    if not pid or pid in seen:
-                        continue
+                    for product in products:
+                        pid   = product.get("id") or product.get("url")
+                        title = product.get("title", "")
 
-                    # ── Keyword match (fast — no extra page load) ─────────────
-                    kw_hit = keywords_match(title)
+                        if not pid or pid in seen:
+                            continue
 
-                    # ── Style number match (instant — read from URL, no page load) ──
-                    style_hit  = False
-                    found_style = ""
-                    if STYLE_NUMBERS and not kw_hit:
-                        style_hit, found_style = style_number_match(product["url"])
+                        # ── Keyword match (fast — no extra page load) ─────────────
+                        kw_hit = keywords_match(title)
 
-                    if not kw_hit and not style_hit:
-                        continue
+                        # ── Style number match (instant — read from URL, no page load) ──
+                        style_hit  = False
+                        found_style = ""
+                        if STYLE_NUMBERS and not kw_hit:
+                            style_hit, found_style = style_number_match(product["url"])
 
-                    # ── We have a match ───────────────────────────────────────
-                    match_reason = []
-                    if kw_hit:
-                        match_reason.append(f"keywords {KEYWORDS}")
-                    if style_hit:
-                        match_reason.append(f"style #{found_style}")
+                        if not kw_hit and not style_hit:
+                            continue
 
-                    log.info(f"  MATCH ({', '.join(match_reason)}): {title}  ({product.get('price', '?')})")
-                    log.info(f"  URL: {product.get('url')}")
+                        # ── We have a match ───────────────────────────────────────
+                        match_reason = []
+                        if kw_hit:
+                            match_reason.append(f"keywords {KEYWORDS}")
+                        if style_hit:
+                            match_reason.append(f"style #{found_style}")
 
-                    # Build notification with noVNC link if VNC is enabled
-                    novnc_url = f"http://{DROPLET_IP}:6080/vnc.html?autoconnect=true" if DROPLET_IP and USE_VNC else ""
+                        log.info(f"  MATCH ({', '.join(match_reason)}): {title}  ({product.get('price', '?')})")
+                        log.info(f"  URL: {product.get('url')}")
 
-                    notification_body = (
-                        f"{title} - {product.get('price', '')}\n"
-                        f"Matched: {', '.join(match_reason)}\n"
-                        f"{product.get('url', '')}"
-                    )
+                        # Build notification with noVNC link if VNC is enabled
+                        novnc_url = f"http://{DROPLET_IP}:6080/vnc.html?autoconnect=true" if DROPLET_IP and USE_VNC else ""
 
-                    if AUTO_ADD_CART and product.get("url"):
-                        # Bag the item first
-                        success = await add_to_cart(page, product["url"])
+                        notification_body = (
+                            f"{title} - {product.get('price', '')}\n"
+                            f"Matched: {', '.join(match_reason)}\n"
+                            f"{product.get('url', '')}"
+                        )
 
-                        if success:
-                            notification_body += "\n\nItem bagged! You have 30 minutes."
-                            if novnc_url:
-                                notification_body += f"\n\nComplete checkout here:\n{novnc_url}"
+                        if AUTO_ADD_CART and product.get("url"):
+                            # Bag the item first
+                            success = await add_to_cart(page, product["url"])
 
+                            if success:
+                                notification_body += "\n\nItem bagged! You have 30 minutes."
+                                if novnc_url:
+                                    notification_body += f"\n\nComplete checkout here:\n{novnc_url}"
+
+                                await notify(
+                                    title="Worn Wear - Item Bagged!",
+                                    body=notification_body,
+                                )
+
+                                # Schedule 25-minute expiry warning
+                                asyncio.create_task(cart_expiry_warning(title, product.get("url", "")))
+                            else:
+                                await notify(
+                                    title="Add to Cart Failed",
+                                    body=(
+                                        f"Found {title} but couldn't add to cart - check logs.\n"
+                                        f"{product.get('url', '')}"
+                                    ),
+                                )
+                        else:
+                            # Just notify without bagging
                             await notify(
-                                title="Worn Wear - Item Bagged!",
+                                title="Worn Wear Match Found!",
                                 body=notification_body,
                             )
 
-                            # Schedule 25-minute expiry warning
-                            asyncio.create_task(cart_expiry_warning(title, product.get("url", "")))
-                        else:
-                            await notify(
-                                title="Add to Cart Failed",
-                                body=(
-                                    f"Found {title} but couldn't add to cart - check logs.\n"
-                                    f"{product.get('url', '')}"
-                                ),
-                            )
-                    else:
-                        # Just notify without bagging
-                        await notify(
-                            title="Worn Wear Match Found!",
-                            body=notification_body,
-                        )
+                        seen.add(pid)
+                        save_seen(seen)
 
-                    seen.add(pid)
-                    save_seen(seen)
+            finally:
+                # Close page after each poll cycle to free memory
+                await page.close()
+                log.info(f"Poll #{poll_count} complete - closed page to free memory")
 
             delay = random.uniform(POLL_MIN, POLL_MAX)
             log.info(f"Sleeping {delay:.0f}s …\n")
