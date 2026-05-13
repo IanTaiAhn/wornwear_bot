@@ -30,12 +30,14 @@ Matching logic:
 """
 
 import asyncio
+from datetime import datetime, timedelta
 import json
 import logging
 import os
 import random
 import re
 import time
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from playwright.async_api import BrowserContext, Page, async_playwright
@@ -81,6 +83,11 @@ NOTIFY_URL    = os.getenv("NOTIFY_URL", "")
 USE_VNC       = os.getenv("USE_VNC", "false").lower() == "true"
 DROPLET_IP    = os.getenv("DROPLET_IP", "")
 
+# Active hours — bot only runs between ACTIVE_START and ACTIVE_END (America/Denver)
+ACTIVE_TZ    = ZoneInfo("America/Denver")
+ACTIVE_START = int(os.getenv("ACTIVE_START", "7"))   # 7 AM
+ACTIVE_END   = int(os.getenv("ACTIVE_END",   "11"))  # 11 AM
+
 STATE_FILE   = "seen_items.json"
 CLEAR_TIMESTAMP_FILE = "last_cleared.txt"
 CLEAR_INTERVAL_HOURS = 24
@@ -105,6 +112,19 @@ ADD_TO_CART_SELECTORS = [
     "[class*='AddToCart']",
     "[class*='add-to-cart']",
 ]
+
+
+# ── Active-hours gate ────────────────────────────────────────────────────────
+
+def seconds_until_active() -> float:
+    """Return 0 if now is within the active window, else seconds until it opens."""
+    now = datetime.now(ACTIVE_TZ)
+    if ACTIVE_START <= now.hour < ACTIVE_END:
+        return 0.0
+    next_open = now.replace(hour=ACTIVE_START, minute=0, second=0, microsecond=0)
+    if now.hour >= ACTIVE_END:
+        next_open += timedelta(days=1)
+    return (next_open - now).total_seconds()
 
 
 # ── State persistence ─────────────────────────────────────────────────────────
@@ -573,6 +593,16 @@ async def run():
 
         # ── Poll loop ─────────────────────────────────────────────────────────
         while True:
+            wait = seconds_until_active()
+            if wait > 0:
+                wake_at = datetime.now(ACTIVE_TZ) + timedelta(seconds=wait)
+                log.info(
+                    f"Outside active hours ({ACTIVE_START}:00–{ACTIVE_END}:00 MT). "
+                    f"Sleeping until {wake_at.strftime('%I:%M %p MT')} …"
+                )
+                await asyncio.sleep(wait)
+                continue
+
             poll_count += 1
 
             # Create a fresh page for this poll cycle to prevent memory accumulation
