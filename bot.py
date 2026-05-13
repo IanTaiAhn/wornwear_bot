@@ -220,22 +220,45 @@ def keywords_match(title: str) -> bool:
 
 def style_number_match(product_url: str) -> tuple[bool, str]:
     """
-    Extract the style number directly from the product URL — no page load needed.
+    Match style numbers against the product URL — no page load needed.
 
     Worn Wear URLs follow the pattern:
-        /products/mens-better-sweater-jacket_25528_sth
-                                             ^^^^^
-    The style number is the numeric segment between the two underscores.
-    This makes style matching instant with zero extra HTTP requests.
+        /products/mens-retro-pile-fleece_10948_vintage_stone-heather
+
+    Entry formats supported in STYLE_NUMBERS:
+      - Contains wildcard (e.g. "*vintage*") — matches if that word appears
+        anywhere in the URL, case-insensitive. Catches _vintage_, vintage-white,
+        or any other variation regardless of position.
+      - Prefix wildcard (e.g. "*_vintage") — matches any numeric style with
+        that exact variant segment, e.g. _10291_vintage_, _10948_vintage_
+      - Exact style+variant (e.g. "10948_vintage") — matches only that combo
+      - Pure numeric (e.g. "25528") — matches _25528_ with any variant
     """
     if not STYLE_NUMBERS:
         return False, ""
 
-    # e.g. "_25528_" -> "25528"
-    segments = re.findall(r'_(\d{4,6})_', product_url)
-    for seg in segments:
-        if seg in STYLE_NUMBERS:
-            return True, seg
+    url_lower = product_url.lower()
+
+    for style in STYLE_NUMBERS:
+        if style.startswith("*") and style.endswith("*"):
+            # Contains wildcard: "vintage" anywhere in the URL
+            keyword = style[1:-1].lower()
+            if keyword in url_lower:
+                return True, style
+        elif style.startswith("*_"):
+            # Prefix wildcard: any numeric style with this variant segment
+            variant = re.escape(style[2:])
+            m = re.search(rf'_(\d{{4,6}}_{variant})_', product_url, re.IGNORECASE)
+            if m:
+                return True, m.group(1)
+        elif re.fullmatch(r'\d{4,6}', style):
+            # Pure numeric
+            if re.search(rf'_{re.escape(style)}_', product_url):
+                return True, style
+        else:
+            # Exact style+variant (e.g. "10948_vintage")
+            if f"_{style.lower()}_" in url_lower:
+                return True, style
 
     return False, ""
 
@@ -633,10 +656,7 @@ async def run():
                         kw_hit = keywords_match(title)
 
                         # ── Style number match (instant — read from URL, no page load) ──
-                        style_hit  = False
-                        found_style = ""
-                        if STYLE_NUMBERS and not kw_hit:
-                            style_hit, found_style = style_number_match(product["url"])
+                        style_hit, found_style = style_number_match(product["url"])
 
                         if not kw_hit and not style_hit:
                             continue
