@@ -226,10 +226,11 @@ def style_number_match(product_url: str) -> tuple[bool, str]:
         /products/mens-retro-pile-fleece_10948_vintage_stone-heather
                                          ^^^^^^^^^^^^^
 
-    Two entry formats are supported in STYLE_NUMBERS:
-      - Pure numeric (e.g. "25528")         — matches _25528_ anywhere in the URL
-      - With variant suffix (e.g. "10948_vintage") — matches _10948_vintage_ exactly,
-        preventing false positives from other cuts of the same base style number
+    Three entry formats supported in STYLE_NUMBERS:
+      - Wildcard variant (e.g. "*_vintage") — matches ANY numeric style with
+        that variant suffix, e.g. _10291_vintage_, _10948_vintage_, etc.
+      - Exact style+variant (e.g. "10948_vintage") — matches only that combo
+      - Pure numeric (e.g. "25528") — matches _25528_ with any variant
     """
     if not STYLE_NUMBERS:
         return False, ""
@@ -237,12 +238,18 @@ def style_number_match(product_url: str) -> tuple[bool, str]:
     url_lower = product_url.lower()
 
     for style in STYLE_NUMBERS:
-        if re.fullmatch(r'\d{4,6}', style):
-            # Pure numeric: original behaviour
+        if style.startswith("*_"):
+            # Wildcard: any numeric style with this variant (e.g. "*_vintage")
+            variant = re.escape(style[2:])
+            m = re.search(rf'_(\d{{4,6}}_{variant})_', product_url, re.IGNORECASE)
+            if m:
+                return True, m.group(1)
+        elif re.fullmatch(r'\d{4,6}', style):
+            # Pure numeric
             if re.search(rf'_{re.escape(style)}_', product_url):
                 return True, style
         else:
-            # Has a suffix (e.g. "10948_vintage"): require exact segment match
+            # Exact style+variant (e.g. "10948_vintage")
             if f"_{style.lower()}_" in url_lower:
                 return True, style
 
@@ -642,10 +649,7 @@ async def run():
                         kw_hit = keywords_match(title)
 
                         # ── Style number match (instant — read from URL, no page load) ──
-                        style_hit  = False
-                        found_style = ""
-                        if STYLE_NUMBERS and not kw_hit:
-                            style_hit, found_style = style_number_match(product["url"])
+                        style_hit, found_style = style_number_match(product["url"])
 
                         if not kw_hit and not style_hit:
                             continue
