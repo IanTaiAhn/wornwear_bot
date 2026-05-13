@@ -79,6 +79,13 @@ cp .env.example .env
 nano .env     # Set KEYWORDS, NOTIFY_URL, AUTO_ADD_CART
 ```
 
+> **TODO (droplet):** Make sure your `.env` on the droplet includes the active-hours variables:
+> ```
+> ACTIVE_START=7
+> ACTIVE_END=11
+> ```
+> Without these, the bot defaults to 7–11 AM MT, but it's good to have them explicit.
+
 ### 4. Install as a system service (runs forever, restarts on crash)
 
 ```bash
