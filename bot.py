@@ -86,7 +86,7 @@ DROPLET_IP    = os.getenv("DROPLET_IP", "")
 # Active hours — bot only runs between ACTIVE_START and ACTIVE_END (America/Denver)
 ACTIVE_TZ    = ZoneInfo("America/Denver")
 ACTIVE_START = int(os.getenv("ACTIVE_START", "7"))   # 7 AM
-ACTIVE_END   = int(os.getenv("ACTIVE_END",   "11"))  # 11 AM
+ACTIVE_END   = int(os.getenv("ACTIVE_END",   "23"))  # 11 PM
 
 STATE_FILE   = "seen_items.json"
 CLEAR_TIMESTAMP_FILE = "last_cleared.txt"
