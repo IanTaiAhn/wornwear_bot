@@ -220,22 +220,31 @@ def keywords_match(title: str) -> bool:
 
 def style_number_match(product_url: str) -> tuple[bool, str]:
     """
-    Extract the style number directly from the product URL — no page load needed.
+    Match style numbers against the product URL — no page load needed.
 
     Worn Wear URLs follow the pattern:
-        /products/mens-better-sweater-jacket_25528_sth
-                                             ^^^^^
-    The style number is the numeric segment between the two underscores.
-    This makes style matching instant with zero extra HTTP requests.
+        /products/mens-retro-pile-fleece_10948_vintage_stone-heather
+                                         ^^^^^^^^^^^^^
+
+    Two entry formats are supported in STYLE_NUMBERS:
+      - Pure numeric (e.g. "25528")         — matches _25528_ anywhere in the URL
+      - With variant suffix (e.g. "10948_vintage") — matches _10948_vintage_ exactly,
+        preventing false positives from other cuts of the same base style number
     """
     if not STYLE_NUMBERS:
         return False, ""
 
-    # e.g. "_25528_" -> "25528"
-    segments = re.findall(r'_(\d{4,6})_', product_url)
-    for seg in segments:
-        if seg in STYLE_NUMBERS:
-            return True, seg
+    url_lower = product_url.lower()
+
+    for style in STYLE_NUMBERS:
+        if re.fullmatch(r'\d{4,6}', style):
+            # Pure numeric: original behaviour
+            if re.search(rf'_{re.escape(style)}_', product_url):
+                return True, style
+        else:
+            # Has a suffix (e.g. "10948_vintage"): require exact segment match
+            if f"_{style.lower()}_" in url_lower:
+                return True, style
 
     return False, ""
 
