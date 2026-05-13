@@ -224,11 +224,13 @@ def style_number_match(product_url: str) -> tuple[bool, str]:
 
     Worn Wear URLs follow the pattern:
         /products/mens-retro-pile-fleece_10948_vintage_stone-heather
-                                         ^^^^^^^^^^^^^
 
-    Three entry formats supported in STYLE_NUMBERS:
-      - Wildcard variant (e.g. "*_vintage") — matches ANY numeric style with
-        that variant suffix, e.g. _10291_vintage_, _10948_vintage_, etc.
+    Entry formats supported in STYLE_NUMBERS:
+      - Contains wildcard (e.g. "*vintage*") — matches if that word appears
+        anywhere in the URL, case-insensitive. Catches _vintage_, vintage-white,
+        or any other variation regardless of position.
+      - Prefix wildcard (e.g. "*_vintage") — matches any numeric style with
+        that exact variant segment, e.g. _10291_vintage_, _10948_vintage_
       - Exact style+variant (e.g. "10948_vintage") — matches only that combo
       - Pure numeric (e.g. "25528") — matches _25528_ with any variant
     """
@@ -238,8 +240,13 @@ def style_number_match(product_url: str) -> tuple[bool, str]:
     url_lower = product_url.lower()
 
     for style in STYLE_NUMBERS:
-        if style.startswith("*_"):
-            # Wildcard: any numeric style with this variant (e.g. "*_vintage")
+        if style.startswith("*") and style.endswith("*"):
+            # Contains wildcard: "vintage" anywhere in the URL
+            keyword = style[1:-1].lower()
+            if keyword in url_lower:
+                return True, style
+        elif style.startswith("*_"):
+            # Prefix wildcard: any numeric style with this variant segment
             variant = re.escape(style[2:])
             m = re.search(rf'_(\d{{4,6}}_{variant})_', product_url, re.IGNORECASE)
             if m:

@@ -82,7 +82,7 @@ nano .env     # Set KEYWORDS, NOTIFY_URL, AUTO_ADD_CART
 > **TODO (droplet):** Make sure your `.env` on the droplet includes these variables:
 > ```
 > KEYWORDS=
-> STYLE_NUMBERS=*_vintage
+> STYLE_NUMBERS=*vintage*
 > ACTIVE_START=7
 > ACTIVE_END=23
 > ```
