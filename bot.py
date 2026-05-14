@@ -98,7 +98,7 @@ SCROLL_PAUSE_MS = 4000
 SCROLL_MAX_STALE = 8
 
 TARGET_URLS = [
-    "https://wornwear.patagonia.com/collections/just-added",
+    "https://wornwear.patagonia.com/search?q=vintage+jacket+men",
 ]
 
 # ── Add-to-cart selectors ─────────────────────────────────────────────────────

@@ -140,6 +140,79 @@ KEYWORDS=r1,full-zip               # targets R1 full-zips only
 
 ---
 
+## Deployment Strategy: Targeting Vintage Grails
+
+### Problem
+The `just-added` collection has 15,000+ items. The bot's pagination stops after ~3 consecutive clicks with no new unique products, so it only harvests a few hundred to ~2,000 items max. Vintage grails buried deep in the catalog get missed.
+
+### Solution: Use Targeted Search URLs
+
+Use specific search queries instead of broad collections to pre-filter results:
+
+```python
+# In bot.py, update TARGET_URLS (lines 100-102):
+TARGET_URLS = [
+    "https://wornwear.patagonia.com/search?q=vintage+jacket+men",
+    "https://wornwear.patagonia.com/search?q=vintage+synchilla",
+    "https://wornwear.patagonia.com/search?q=vintage+snap-t",
+    "https://wornwear.patagonia.com/search?q=vintage+retro-x",
+]
+```
+
+This targets actual grail items (Synchilla, Snap-T, Retro-X fleeces) instead of scanning 15,000 items.
+
+### Initial Setup Process
+
+**Step 1: Prime the seen_items.json (avoid bagging hundreds of existing items)**
+
+```bash
+# On your droplet, set AUTO_ADD_CART to false
+nano /root/wornwear-bot/.env
+```
+
+Set:
+```bash
+AUTO_ADD_CART=false
+STYLE_NUMBERS=*_vintage
+KEYWORDS=
+```
+
+Restart and let it run 1-2 poll cycles:
+```bash
+systemctl restart wornwear-bot
+journalctl -u wornwear-bot -f
+```
+
+This populates `seen_items.json` with all existing vintage items without bagging them.
+
+**Step 2: Enable auto-bagging for NEW items only**
+
+Once `seen_items.json` is primed:
+```bash
+nano /root/wornwear-bot/.env
+```
+
+Set:
+```bash
+AUTO_ADD_CART=true
+```
+
+Restart:
+```bash
+systemctl restart wornwear-bot
+```
+
+Now the bot will **only bag newly added vintage grails**, not the hundreds of existing ones.
+
+### Why This Works
+
+- Search URLs return 100-500 items (not 15,000), so pagination completes fully
+- `*_vintage` in `STYLE_NUMBERS` matches vintage variants in URL (not just color names)
+- `seen_items.json` prevents re-bagging on every poll cycle
+- Bot only bags items added **after** the initial priming run
+
+---
+
 ## Notes
 
 - The bot only notifies (AUTO_ADD_CART=false by default). Set to true only
