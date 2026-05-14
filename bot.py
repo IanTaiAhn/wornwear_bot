@@ -90,7 +90,7 @@ ACTIVE_END   = int(os.getenv("ACTIVE_END",   "23"))  # 11 PM
 
 STATE_FILE   = "seen_items.json"
 CLEAR_TIMESTAMP_FILE = "last_cleared.txt"
-CLEAR_INTERVAL_HOURS = 24
+CLEAR_INTERVAL_HOURS = 999999  # Never clear - prevents re-bagging vintage items
 
 # How long to wait after each scroll before checking if new products loaded
 SCROLL_PAUSE_MS = 4000
