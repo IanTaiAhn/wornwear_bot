@@ -88,7 +88,8 @@ ACTIVE_TZ    = ZoneInfo("America/Denver")
 ACTIVE_START = int(os.getenv("ACTIVE_START", "7"))   # 7 AM
 ACTIVE_END   = int(os.getenv("ACTIVE_END",   "23"))  # 11 PM
 
-STATE_FILE   = "seen_items.json"
+STATE_FILE        = "seen_items.json"
+RARE_ITEMS_FILE   = "rare_items.json"
 CLEAR_TIMESTAMP_FILE = "last_cleared.txt"
 CLEAR_INTERVAL_HOURS = 999999  # Never clear - prevents re-bagging vintage items
 
@@ -98,7 +99,36 @@ SCROLL_PAUSE_MS = 4000
 SCROLL_MAX_STALE = 8
 
 TARGET_URLS = [
+    # ── Jackets ────────────────────────────────────────────────────────────────
     "https://wornwear.patagonia.com/search?q=vintage+jacket+men",
+
+    # ── Shirts ─────────────────────────────────────────────────────────────────
+    "https://wornwear.patagonia.com/search?q=vintage+shirt+men",
+    "https://wornwear.patagonia.com/search?q=vintage+flannel+men",
+    "https://wornwear.patagonia.com/search?q=chamois+shirt+men",
+    "https://wornwear.patagonia.com/search?q=retro+shirt+men",
+
+    # ── Pants ──────────────────────────────────────────────────────────────────
+    "https://wornwear.patagonia.com/search?q=vintage+pants+men",
+    "https://wornwear.patagonia.com/search?q=stand+up+pants+men",
+    "https://wornwear.patagonia.com/search?q=iron+forge+pants+men",
+    "https://wornwear.patagonia.com/search?q=retro+pants+men",
+
+    # ── Shorts ─────────────────────────────────────────────────────────────────
+    "https://wornwear.patagonia.com/search?q=vintage+shorts+men",
+    "https://wornwear.patagonia.com/search?q=baggies+shorts+men",
+    "https://wornwear.patagonia.com/search?q=stand+up+shorts+men",
+    "https://wornwear.patagonia.com/search?q=retro+shorts+men",
+
+    # ── Hats ───────────────────────────────────────────────────────────────────
+    "https://wornwear.patagonia.com/search?q=vintage+hat+men",
+    "https://wornwear.patagonia.com/search?q=trucker+hat",
+    "https://wornwear.patagonia.com/search?q=lopro+trucker",
+    "https://wornwear.patagonia.com/search?q=p-6+hat",
+
+    # ── Belts ──────────────────────────────────────────────────────────────────
+    "https://wornwear.patagonia.com/search?q=vintage+belt+men",
+    "https://wornwear.patagonia.com/search?q=web+belt",
 ]
 
 # ── Add-to-cart selectors ─────────────────────────────────────────────────────
@@ -112,6 +142,45 @@ ADD_TO_CART_SELECTORS = [
     "[class*='AddToCart']",
     "[class*='add-to-cart']",
 ]
+
+
+# ── Rare-items list ──────────────────────────────────────────────────────────
+
+def load_rare_items() -> dict:
+    """Load rare_items.json, returning empty structure if missing or invalid."""
+    if not os.path.exists(RARE_ITEMS_FILE):
+        return {"style_numbers": [], "url_patterns": []}
+    try:
+        with open(RARE_ITEMS_FILE) as f:
+            data = json.load(f)
+        return {
+            "style_numbers": [str(s).lower() for s in data.get("style_numbers", [])],
+            "url_patterns":  [str(p).lower() for p in data.get("url_patterns",  [])],
+        }
+    except Exception as e:
+        log.warning(f"Could not load {RARE_ITEMS_FILE}: {e}")
+        return {"style_numbers": [], "url_patterns": []}
+
+
+_RARE: dict = {}  # loaded once at startup, reloaded each poll
+
+
+def is_rare_item(product_url: str) -> bool:
+    """Return True if the item matches any entry in rare_items.json."""
+    url_lower = product_url.lower()
+
+    for sn in _RARE.get("style_numbers", []):
+        if f"_{sn}_" in url_lower or url_lower.endswith(f"_{sn}"):
+            return True
+
+    for pat in _RARE.get("url_patterns", []):
+        if pat.startswith("*") and pat.endswith("*"):
+            if pat[1:-1] in url_lower:
+                return True
+        elif pat in url_lower:
+            return True
+
+    return False
 
 
 # ── Active-hours gate ────────────────────────────────────────────────────────
@@ -577,6 +646,8 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 async def run():
+    global _RARE
+    _RARE = load_rare_items()
     seen = load_seen()
 
     log.info(f"Bot started.")
@@ -640,6 +711,9 @@ async def run():
                     seen.clear()  # Clear the in-memory set
                     save_seen(seen)  # Persist the empty set
 
+                # Reload rare items on every poll so edits take effect without restart
+                _RARE.update(load_rare_items())
+
                 for url in TARGET_URLS:
                     log.info(f"Checking {url} …")
                     products = await scrape_all_products(page, url)
@@ -649,8 +723,11 @@ async def run():
                         pid   = product.get("id") or product.get("url")
                         title = product.get("title", "")
 
-                        if not pid or pid in seen:
+                        rare = is_rare_item(product.get("url", ""))
+                        if not pid or (pid in seen and not rare):
                             continue
+                        if pid in seen and rare:
+                            log.info(f"  Re-processing rare item (bypassing seen): {title}")
 
                         # ── Keyword match (fast — no extra page load) ─────────────
                         kw_hit = keywords_match(title)

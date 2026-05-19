@@ -1,0 +1,5 @@
+{
+  "_comment": "Items listed here bypass seen_items.json — the bot will re-bag them whenever they appear.",
+  "style_numbers": [],
+  "url_patterns": []
+}
