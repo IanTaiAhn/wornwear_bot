@@ -1,5 +1,5 @@
 {
   "_comment": "Items listed here bypass seen_items.json — the bot will re-bag them whenever they appear.",
-  "style_numbers": [],
+  "style_numbers": ["23055_vintage", "20802_vintage", "20816", "20801_vintage", "21202_vintage", "30102_vintage", "10961_vintage", "25150_vintage"],
   "url_patterns": []
 }
