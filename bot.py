@@ -735,7 +735,7 @@ async def run():
                         # ── Style number match (instant — read from URL, no page load) ──
                         style_hit, found_style = style_number_match(product["url"])
 
-                        if not kw_hit and not style_hit:
+                        if not kw_hit and not style_hit and not rare:
                             continue
 
                         # ── We have a match ───────────────────────────────────────
@@ -744,6 +744,8 @@ async def run():
                             match_reason.append(f"keywords {KEYWORDS}")
                         if style_hit:
                             match_reason.append(f"style #{found_style}")
+                        if rare:
+                            match_reason.append("rare item (grail)")
 
                         log.info(f"  MATCH ({', '.join(match_reason)}): {title}  ({product.get('price', '?')})")
                         log.info(f"  URL: {product.get('url')}")
