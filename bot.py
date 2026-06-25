@@ -93,6 +93,9 @@ RARE_ITEMS_FILE   = "rare_items.json"
 CLEAR_TIMESTAMP_FILE = "last_cleared.txt"
 CLEAR_INTERVAL_HOURS = 999999  # Never clear - prevents re-bagging vintage items
 
+# Rare items: don't re-cart within this many seconds of the last add (matches cart TTL)
+RARE_RECART_COOLDOWN = 1800  # 30 minutes
+
 # How long to wait after each scroll before checking if new products loaded
 SCROLL_PAUSE_MS = 4000
 # Give up scrolling after this many consecutive scrolls with no new products
@@ -163,6 +166,7 @@ def load_rare_items() -> dict:
 
 
 _RARE: dict = {}  # loaded once at startup, reloaded each poll
+_rare_carted: dict[str, float] = {}  # pid -> timestamp of last successful cart add
 
 
 def is_rare_item(product_url: str) -> bool:
@@ -646,9 +650,10 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 async def run():
-    global _RARE
+    global _RARE, _rare_carted
     _RARE = load_rare_items()
     seen = load_seen()
+    _background_tasks: set = set()
 
     log.info(f"Bot started.")
     log.info(f"  Keywords:     {KEYWORDS or '(none)'}")
@@ -726,7 +731,16 @@ async def run():
                         rare = is_rare_item(product.get("url", ""))
                         if not pid or (pid in seen and not rare):
                             continue
+
                         if pid in seen and rare:
+                            # Only re-process a rare item if it's outside the cart cooldown window
+                            last_carted = _rare_carted.get(pid, 0)
+                            if time.time() - last_carted < RARE_RECART_COOLDOWN:
+                                log.info(
+                                    f"  Rare item on cooldown (re-cart in "
+                                    f"{int(RARE_RECART_COOLDOWN - (time.time() - last_carted))}s): {title}"
+                                )
+                                continue
                             log.info(f"  Re-processing rare item (bypassing seen): {title}")
 
                         # ── Keyword match (fast — no extra page load) ─────────────
@@ -764,6 +778,8 @@ async def run():
                             success = await add_to_cart(page, product["url"])
 
                             if success:
+                                if rare:
+                                    _rare_carted[pid] = time.time()
                                 notification_body += "\n\nItem bagged! You have 30 minutes."
                                 if novnc_url:
                                     notification_body += f"\n\nComplete checkout here:\n{novnc_url}"
@@ -773,8 +789,10 @@ async def run():
                                     body=notification_body,
                                 )
 
-                                # Schedule 25-minute expiry warning
-                                asyncio.create_task(cart_expiry_warning(title, product.get("url", "")))
+                                # Schedule 25-minute expiry warning (keep reference to prevent GC)
+                                task = asyncio.create_task(cart_expiry_warning(title, product.get("url", "")))
+                                _background_tasks.add(task)
+                                task.add_done_callback(_background_tasks.discard)
                             else:
                                 await notify(
                                     title="Add to Cart Failed",
