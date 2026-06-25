@@ -338,11 +338,11 @@ def style_number_match(product_url: str) -> tuple[bool, str]:
 
 # ── JS snippets ───────────────────────────────────────────────────────────────
 
-# Count of unique product URLs currently visible in the DOM
+# Count of unique product URLs currently visible in the DOM (strip query params)
 _COUNT_JS = """
     () => new Set(
         Array.from(document.querySelectorAll('a[href*="/products/"]'))
-            .map(a => a.href)
+            .map(a => a.origin + new URL(a.href).pathname)
     ).size
 """
 
@@ -352,8 +352,9 @@ _EXTRACT_JS = """
         const seen = new Set();
         const links = Array.from(document.querySelectorAll('a[href*="/products/"]'))
             .filter(a => {
-                if (seen.has(a.href)) return false;
-                seen.add(a.href);
+                const key = a.origin + new URL(a.href).pathname;
+                if (seen.has(key)) return false;
+                seen.add(key);
                 return true;
             });
         return links.map(link => {
@@ -363,12 +364,13 @@ _EXTRACT_JS = """
             const priceEl = parent?.querySelector(
                 '[class*="price"], .price, [class*="Price"]'
             );
+            const cleanUrl = link.origin + new URL(link.href).pathname;
             return {
                 title: link.innerText?.trim() ||
                        link.querySelector('h1,h2,h3,h4,p')?.innerText?.trim() || '',
                 price: priceEl?.innerText?.trim() || '',
-                url:   link.href,
-                id:    link.href.split('/').pop()
+                url:   cleanUrl,
+                id:    cleanUrl.split('/').pop()
             };
         }).filter(p => p.title && p.url);
     }
