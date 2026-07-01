@@ -502,6 +502,32 @@ async def scrape_all_products(page: Page, url: str) -> list[dict]:
 
 # ── Add to cart ───────────────────────────────────────────────────────────────
 
+CART_COUNT_SELECTORS = [
+    "[data-cart-count]",
+    "[data-testid='cart-count']",
+    ".cart-count",
+    "[class*='cart-count']",
+    "[class*='CartCount']",
+    "[aria-label*='cart' i] [class*='count']",
+]
+
+
+async def _get_cart_count(page: Page) -> int | None:
+    """Best-effort read of the header cart badge count. Returns None if it can't be determined."""
+    for sel in CART_COUNT_SELECTORS:
+        try:
+            locator = page.locator(sel).first
+            if await locator.count() == 0:
+                continue
+            text = (await locator.inner_text(timeout=1000)).strip()
+            digits = "".join(ch for ch in text if ch.isdigit())
+            if digits:
+                return int(digits)
+        except Exception:
+            continue
+    return None
+
+
 async def add_to_cart(page: Page, product_url: str) -> bool:
     try:
         log.info(f"Attempting add-to-cart: {product_url}")
@@ -586,7 +612,13 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
                 break
 
         if not selection_success:
-            log.warning("Could not select any valid color/size combination — may all be sold out.")
+            log.warning(
+                "Could not select any valid color/size combination — may all be sold out. "
+                "Aborting add-to-cart (no variant available to bag)."
+            )
+            return False
+
+        cart_count_before = await _get_cart_count(page)
 
         for sel in ADD_TO_CART_SELECTORS:
             try:
@@ -630,9 +662,26 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
                         except Exception:
                             continue
 
-                    # If no clear success/error indicator, assume it worked (optimistic)
-                    log.info("No clear success indicator found, but no errors either - assuming success")
-                    return True
+                    # No clear text-based indicator either way — fall back to comparing
+                    # the header cart count before/after the click.
+                    cart_count_after = await _get_cart_count(page)
+                    if (
+                        cart_count_before is not None
+                        and cart_count_after is not None
+                        and cart_count_after > cart_count_before
+                    ):
+                        log.info(
+                            f"Verified: cart count increased ({cart_count_before} -> {cart_count_after})"
+                        )
+                        return True
+
+                    # Still ambiguous — do NOT assume success. A false "bagged" report is
+                    # far worse than a false failure for a bot bagging real, paid items.
+                    log.warning(
+                        "Ambiguous add-to-cart result — no success/error indicator and cart "
+                        "count did not increase. Treating as failure to avoid a false 'bagged' report."
+                    )
+                    return False
             except Exception as e:
                 log.warning(f"Exception clicking add-to-cart with {sel}: {e}")
                 continue
