@@ -3,6 +3,14 @@ Worn Wear Monitor Bot
 Polls wornwear.patagonia.com for items matching your keywords and/or style
 numbers, then optionally adds to cart when found.
 
+Runs two concurrent loops in one browser (see run_general_loop/run_grail_loop):
+  - General loop: broad keyword/style search across TARGET_URLS, full
+    catalog scroll-pagination, current POLL_MIN-MAX cadence.
+  - Grail loop: tight-interval watcher for the rare style numbers in
+    rare_items.json, via narrow single-item searches (?q=<style>) that
+    don't need pagination — so it never gets stuck behind the general
+    loop's slow full-catalog scrape.
+
 Includes:
   - Scroll-based "load more" to fetch the full catalog (not just first 24)
   - Style number matching (checks individual product pages for style #)
@@ -23,10 +31,19 @@ Requirements:
     USE_VNC=false                      # Set to true on droplet for noVNC access
     DROPLET_IP=                        # Your droplet IP (for noVNC links)
 
+    # Grail loop (rare_items.json watcher) — all optional, shown with defaults
+    GRAIL_POLL_MIN=10
+    GRAIL_POLL_MAX=20
+    GRAIL_TABS=3                       # concurrent tabs checking rare style numbers
+    GRAIL_COOLDOWN_SECONDS=1800        # skip re-attempts on a confirmed bag for this long
+    GRAIL_RETRY_COOLDOWN_SECONDS=120   # skip re-attempts on a failed attempt for this long
+
 Matching logic:
   - If KEYWORDS set and STYLE_NUMBERS set: alert if keywords match OR style # matches
   - If only KEYWORDS set:                  alert if keywords match
   - If only STYLE_NUMBERS set:             alert if style # matches
+  - rare_items.json entries are always watched by the grail loop regardless
+    of KEYWORDS/STYLE_NUMBERS.
 """
 
 import asyncio
@@ -37,6 +54,7 @@ import os
 import random
 import re
 import time
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
@@ -78,6 +96,16 @@ POLL_MIN      = int(os.getenv("POLL_MIN", "30"))
 POLL_MAX      = int(os.getenv("POLL_MAX", "65"))
 AUTO_ADD_CART = os.getenv("AUTO_ADD_CART", "false").lower() == "true"
 NOTIFY_URL    = os.getenv("NOTIFY_URL", "")
+
+# Grail loop — a second, much tighter poll loop that watches only the rare
+# style numbers in rare_items.json via narrow single-item searches, running
+# concurrently with the general loop in the same browser (own tab(s), so it
+# never gets stuck behind the general loop's slow full-catalog scrape).
+GRAIL_POLL_MIN               = int(os.getenv("GRAIL_POLL_MIN", "10"))
+GRAIL_POLL_MAX               = int(os.getenv("GRAIL_POLL_MAX", "20"))
+GRAIL_TABS                   = int(os.getenv("GRAIL_TABS", "3"))
+GRAIL_COOLDOWN_SECONDS       = int(os.getenv("GRAIL_COOLDOWN_SECONDS", "1800"))  # after a confirmed bag (~cart hold length)
+GRAIL_RETRY_COOLDOWN_SECONDS = int(os.getenv("GRAIL_RETRY_COOLDOWN_SECONDS", "120"))  # after a failed/no-op attempt
 
 # noVNC setup (set USE_VNC=true on production droplet)
 USE_VNC       = os.getenv("USE_VNC", "false").lower() == "true"
@@ -181,6 +209,43 @@ def is_rare_item(product_url: str) -> bool:
             return True
 
     return False
+
+
+def grail_search_urls() -> list[str]:
+    """
+    One narrow search URL per rare style number, derived directly from
+    rare_items.json — no separate URL list to hand-maintain and keep in
+    sync. Entries like "23055_vintage" carry a "_vintage" suffix used only
+    for matching product URLs (see is_rare_item); as a *search query* only
+    the numeric prefix is meaningful, so that's all that's used here.
+    """
+    queries: list[str] = []
+    seen_q: set[str] = set()
+    for sn in _RARE.get("style_numbers", []):
+        q = sn.split("_")[0].strip()
+        if q and q not in seen_q:
+            seen_q.add(q)
+            queries.append(f"https://wornwear.patagonia.com/search?q={quote(q)}")
+    return queries
+
+
+# ── Grail loop cooldown ───────────────────────────────────────────────────────
+# The grail loop intentionally re-checks the same style numbers on every
+# cycle (that's the point — catch a relist within seconds). Without a
+# cooldown it would re-attempt add_to_cart on the same still-listed item
+# every GRAIL_POLL_MIN-MAX seconds forever. This tracks, per product id, how
+# long to leave it alone after an attempt.
+
+_grail_cooldown_until: dict[str, float] = {}
+
+
+def grail_on_cooldown(pid: str) -> bool:
+    until = _grail_cooldown_until.get(pid)
+    return until is not None and time.time() < until
+
+
+def grail_start_cooldown(pid: str, seconds: int):
+    _grail_cooldown_until[pid] = time.time() + seconds
 
 
 # ── Active-hours gate ────────────────────────────────────────────────────────
@@ -500,6 +565,25 @@ async def scrape_all_products(page: Page, url: str) -> list[dict]:
     return list(all_products.values())
 
 
+async def scrape_grail_page(page: Page, url: str) -> list[dict]:
+    """
+    Lightweight, single-shot harvest for narrow style-number searches.
+
+    A search like ?q=25410 returns only a handful of results that are all
+    present in the DOM on first load — there's nothing to scroll or
+    Load-More through. Unlike scrape_all_products (which always pays a
+    ~15s+ floor waiting out stale scroll rounds, even on a near-empty
+    results page) this is a single page load and one DOM read, ~1-2s.
+    """
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=20_000)
+        await page.wait_for_timeout(random.randint(800, 1500))
+        return await page.evaluate(_EXTRACT_JS)
+    except Exception as e:
+        log.warning(f"[grail] Failed to check {url}: {e}")
+        return []
+
+
 # ── Add to cart ───────────────────────────────────────────────────────────────
 
 CART_COUNT_SELECTORS = [
@@ -694,23 +778,218 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
         return False
 
 
-# ── Main loop ─────────────────────────────────────────────────────────────────
+# ── Shared match handling ────────────────────────────────────────────────────
+
+async def bag_and_notify(page: Page, product: dict, match_reason: list[str]) -> bool:
+    """
+    Handle a matched product: bag it (if AUTO_ADD_CART) and send the
+    appropriate notification. Shared by both the general and grail loops so
+    the bagging/notification behavior can't drift between them.
+
+    Returns True only if the item was actually confirmed bagged.
+    """
+    title = product.get("title", "")
+    url = product.get("url", "")
+    novnc_url = f"http://{DROPLET_IP}:6080/vnc.html?autoconnect=true" if DROPLET_IP and USE_VNC else ""
+
+    notification_body = (
+        f"{title} - {product.get('price', '')}\n"
+        f"Matched: {', '.join(match_reason)}\n"
+        f"{url}"
+    )
+
+    if not (AUTO_ADD_CART and url):
+        await notify(title="Worn Wear Match Found!", body=notification_body)
+        return False
+
+    success = await add_to_cart(page, url)
+
+    if success:
+        notification_body += "\n\nItem bagged! You have 30 minutes."
+        if novnc_url:
+            notification_body += f"\n\nComplete checkout here:\n{novnc_url}"
+
+        await notify(title="Worn Wear - Item Bagged!", body=notification_body)
+
+        # Schedule 25-minute expiry warning
+        asyncio.create_task(cart_expiry_warning(title, url))
+    else:
+        await notify(
+            title="Add to Cart Failed",
+            body=f"Found {title} but couldn't add to cart - check logs.\n{url}",
+        )
+
+    return success
+
+
+# ── General loop (broad keyword/style search) ───────────────────────────────
+
+async def run_general_loop(context: BrowserContext):
+    if not KEYWORDS and not STYLE_NUMBERS:
+        log.info(
+            "[general] No KEYWORDS or STYLE_NUMBERS set — general loop disabled "
+            "(grail loop still runs if rare_items.json has entries)."
+        )
+        return
+
+    seen = load_seen()
+
+    log.info(f"[general] Keywords:      {KEYWORDS or '(none)'}")
+    log.info(f"[general] Style #s:      {STYLE_NUMBERS or '(none)'}")
+    log.info(f"[general] Poll interval: {POLL_MIN}–{POLL_MAX}s  |  Auto-cart: {AUTO_ADD_CART}")
+    log.info(f"[general] Seen items:    {len(seen)} from previous runs")
+
+    poll_count = 0
+
+    while True:
+        wait = seconds_until_active()
+        if wait > 0:
+            wake_at = datetime.now(ACTIVE_TZ) + timedelta(seconds=wait)
+            log.info(
+                f"[general] Outside active hours ({ACTIVE_START}:00–{ACTIVE_END}:00 MT). "
+                f"Sleeping until {wake_at.strftime('%I:%M %p MT')} …"
+            )
+            await asyncio.sleep(wait)
+            continue
+
+        poll_count += 1
+
+        # Create a fresh page for this poll cycle to prevent memory accumulation
+        page = await context.new_page()
+        log.info(f"[general] Poll #{poll_count} - created fresh page to manage memory")
+
+        try:
+            # Check if we should clear seen items (every 24 hours while running)
+            if should_clear_seen():
+                log.info(f"[general] ⏰ {CLEAR_INTERVAL_HOURS}h passed — clearing seen items to catch re-listed products")
+                mark_cleared()
+                seen.clear()
+                save_seen(seen)
+
+            for url in TARGET_URLS:
+                log.info(f"[general] Checking {url} …")
+                products = await scrape_all_products(page, url)
+                log.info(f"[general]  Total unique products harvested: {len(products)}")
+
+                for product in products:
+                    pid   = product.get("id") or product.get("url")
+                    title = product.get("title", "")
+
+                    if not pid or pid in seen:
+                        continue
+
+                    kw_hit = keywords_match(title)
+                    style_hit, found_style = style_number_match(product["url"])
+
+                    if not kw_hit and not style_hit:
+                        continue
+
+                    match_reason = []
+                    if kw_hit:
+                        match_reason.append(f"keywords {KEYWORDS}")
+                    if style_hit:
+                        match_reason.append(f"style #{found_style}")
+
+                    log.info(f"[general]  MATCH ({', '.join(match_reason)}): {title}  ({product.get('price', '?')})")
+                    log.info(f"[general]  URL: {product.get('url')}")
+
+                    await bag_and_notify(page, product, match_reason)
+
+                    seen.add(pid)
+                    save_seen(seen)
+
+        finally:
+            await page.close()
+            log.info(f"[general] Poll #{poll_count} complete - closed page to free memory")
+
+        delay = random.uniform(POLL_MIN, POLL_MAX)
+        log.info(f"[general] Sleeping {delay:.0f}s …\n")
+        await asyncio.sleep(delay)
+
+
+# ── Grail loop (tight-interval rare-item watcher) ────────────────────────────
+
+async def run_grail_loop(context: BrowserContext):
+    _RARE.update(load_rare_items())
+    if not _RARE.get("style_numbers") and not _RARE.get("url_patterns"):
+        log.info("[grail] rare_items.json has no entries — grail loop disabled.")
+        return
+
+    tab_count = max(1, GRAIL_TABS)
+    pages = [await context.new_page() for _ in range(tab_count)]
+
+    log.info(
+        f"[grail] Poll interval: {GRAIL_POLL_MIN}–{GRAIL_POLL_MAX}s  |  "
+        f"Tabs: {tab_count}  |  Cooldown: {GRAIL_COOLDOWN_SECONDS}s (retry {GRAIL_RETRY_COOLDOWN_SECONDS}s)"
+    )
+
+    async def check_bucket(page: Page, urls: list[str]):
+        for url in urls:
+            products = await scrape_grail_page(page, url)
+            for product in products:
+                purl = product.get("url", "")
+                if not purl or not is_rare_item(purl):
+                    continue
+
+                pid = product.get("id") or purl
+                if grail_on_cooldown(pid):
+                    continue
+
+                title = product.get("title", "")
+                log.info(f"[grail]  MATCH (rare item): {title}  ({product.get('price', '?')})")
+                log.info(f"[grail]  URL: {purl}")
+
+                bagged = await bag_and_notify(page, product, ["rare item (grail)"])
+                grail_start_cooldown(
+                    pid, GRAIL_COOLDOWN_SECONDS if bagged else GRAIL_RETRY_COOLDOWN_SECONDS
+                )
+
+    try:
+        poll_count = 0
+        while True:
+            wait = seconds_until_active()
+            if wait > 0:
+                await asyncio.sleep(min(wait, GRAIL_POLL_MAX))
+                continue
+
+            poll_count += 1
+
+            # Reload rare items on every poll so edits take effect without restart
+            _RARE.update(load_rare_items())
+            urls = grail_search_urls()
+
+            if not urls:
+                log.info("[grail] No rare style numbers configured — nothing to watch.")
+            else:
+                log.info(f"[grail] Poll #{poll_count} - checking {len(urls)} grail queries across {tab_count} tab(s)")
+
+                buckets: list[list[str]] = [[] for _ in pages]
+                for i, u in enumerate(urls):
+                    buckets[i % tab_count].append(u)
+
+                await asyncio.gather(*(check_bucket(p, b) for p, b in zip(pages, buckets)))
+
+            delay = random.uniform(GRAIL_POLL_MIN, GRAIL_POLL_MAX)
+            log.info(f"[grail] Sleeping {delay:.0f}s …\n")
+            await asyncio.sleep(delay)
+    finally:
+        for p in pages:
+            await p.close()
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 async def run():
     global _RARE
     _RARE = load_rare_items()
-    seen = load_seen()
 
-    log.info(f"Bot started.")
-    log.info(f"  Keywords:     {KEYWORDS or '(none)'}")
-    log.info(f"  Style #s:     {STYLE_NUMBERS or '(none)'}")
-    log.info(f"  Poll interval: {POLL_MIN}–{POLL_MAX}s  |  Auto-cart: {AUTO_ADD_CART}")
-    log.info(f"  VNC mode:     {'enabled' if USE_VNC else 'disabled (local/headless)'}")
-    log.info(f"  Seen items:   {len(seen)} from previous runs")
+    log.info("Bot started.")
+    log.info(f"  Rare styles: {len(_RARE.get('style_numbers', []))} (grail loop)")
+    log.info(f"  VNC mode:    {'enabled' if USE_VNC else 'disabled (local/headless)'}")
 
-    if not KEYWORDS and not STYLE_NUMBERS:
+    if not KEYWORDS and not STYLE_NUMBERS and not _RARE.get("style_numbers") and not _RARE.get("url_patterns"):
         log.error(
-            "No KEYWORDS or STYLE_NUMBERS set in .env — nothing to search for. Exiting."
+            "No KEYWORDS, STYLE_NUMBERS, or rare_items.json entries configured — nothing to search for. Exiting."
         )
         return
 
@@ -734,124 +1013,13 @@ async def run():
             locale="en-US",
         )
 
-        poll_count = 0
-
-        # ── Poll loop ─────────────────────────────────────────────────────────
-        while True:
-            wait = seconds_until_active()
-            if wait > 0:
-                wake_at = datetime.now(ACTIVE_TZ) + timedelta(seconds=wait)
-                log.info(
-                    f"Outside active hours ({ACTIVE_START}:00–{ACTIVE_END}:00 MT). "
-                    f"Sleeping until {wake_at.strftime('%I:%M %p MT')} …"
-                )
-                await asyncio.sleep(wait)
-                continue
-
-            poll_count += 1
-
-            # Create a fresh page for this poll cycle to prevent memory accumulation
-            page = await context.new_page()
-            log.info(f"Poll #{poll_count} - created fresh page to manage memory")
-
-            try:
-                # Check if we should clear seen items (every 24 hours while running)
-                if should_clear_seen():
-                    log.info(f"⏰ {CLEAR_INTERVAL_HOURS}h passed — clearing seen items to catch re-listed products")
-                    mark_cleared()
-                    seen.clear()  # Clear the in-memory set
-                    save_seen(seen)  # Persist the empty set
-
-                # Reload rare items on every poll so edits take effect without restart
-                _RARE.update(load_rare_items())
-
-                for url in TARGET_URLS:
-                    log.info(f"Checking {url} …")
-                    products = await scrape_all_products(page, url)
-                    log.info(f"  Total unique products harvested: {len(products)}")
-
-                    for product in products:
-                        pid   = product.get("id") or product.get("url")
-                        title = product.get("title", "")
-
-                        rare = is_rare_item(product.get("url", ""))
-                        if not pid or (pid in seen and not rare):
-                            continue
-                        if pid in seen and rare:
-                            log.info(f"  Re-processing rare item (bypassing seen): {title}")
-
-                        # ── Keyword match (fast — no extra page load) ─────────────
-                        kw_hit = keywords_match(title)
-
-                        # ── Style number match (instant — read from URL, no page load) ──
-                        style_hit, found_style = style_number_match(product["url"])
-
-                        if not kw_hit and not style_hit and not rare:
-                            continue
-
-                        # ── We have a match ───────────────────────────────────────
-                        match_reason = []
-                        if kw_hit:
-                            match_reason.append(f"keywords {KEYWORDS}")
-                        if style_hit:
-                            match_reason.append(f"style #{found_style}")
-                        if rare:
-                            match_reason.append("rare item (grail)")
-
-                        log.info(f"  MATCH ({', '.join(match_reason)}): {title}  ({product.get('price', '?')})")
-                        log.info(f"  URL: {product.get('url')}")
-
-                        # Build notification with noVNC link if VNC is enabled
-                        novnc_url = f"http://{DROPLET_IP}:6080/vnc.html?autoconnect=true" if DROPLET_IP and USE_VNC else ""
-
-                        notification_body = (
-                            f"{title} - {product.get('price', '')}\n"
-                            f"Matched: {', '.join(match_reason)}\n"
-                            f"{product.get('url', '')}"
-                        )
-
-                        if AUTO_ADD_CART and product.get("url"):
-                            # Bag the item first
-                            success = await add_to_cart(page, product["url"])
-
-                            if success:
-                                notification_body += "\n\nItem bagged! You have 30 minutes."
-                                if novnc_url:
-                                    notification_body += f"\n\nComplete checkout here:\n{novnc_url}"
-
-                                await notify(
-                                    title="Worn Wear - Item Bagged!",
-                                    body=notification_body,
-                                )
-
-                                # Schedule 25-minute expiry warning
-                                asyncio.create_task(cart_expiry_warning(title, product.get("url", "")))
-                            else:
-                                await notify(
-                                    title="Add to Cart Failed",
-                                    body=(
-                                        f"Found {title} but couldn't add to cart - check logs.\n"
-                                        f"{product.get('url', '')}"
-                                    ),
-                                )
-                        else:
-                            # Just notify without bagging
-                            await notify(
-                                title="Worn Wear Match Found!",
-                                body=notification_body,
-                            )
-
-                        seen.add(pid)
-                        save_seen(seen)
-
-            finally:
-                # Close page after each poll cycle to free memory
-                await page.close()
-                log.info(f"Poll #{poll_count} complete - closed page to free memory")
-
-            delay = random.uniform(POLL_MIN, POLL_MAX)
-            log.info(f"Sleeping {delay:.0f}s …\n")
-            await asyncio.sleep(delay)
+        # General (broad, slow) and grail (narrow, tight-interval) loops share
+        # this one browser/context and run concurrently — no second Chromium
+        # process, just a second set of tabs.
+        await asyncio.gather(
+            run_general_loop(context),
+            run_grail_loop(context),
+        )
 
 
 if __name__ == "__main__":
