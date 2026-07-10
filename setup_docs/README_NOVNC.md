@@ -11,6 +11,9 @@ Your bot now supports remote browser access via noVNC, allowing you to manually 
 - ✅ **Manual checkout** - Full control over payment entry and purchase decision
 - ✅ **25-minute expiry warning** - Second notification before cart expires
 - ✅ **Local/Production modes** - Test locally (headless), deploy with VNC
+- ✅ **Pinned cart tab** - A dedicated tab always shows `/cart`, so search/grail
+  tabs stealing focus mid-poll no longer knock you off the page you're trying
+  to look at
 
 ### Configuration
 Two new environment variables in `.env`:
@@ -18,6 +21,14 @@ Two new environment variables in `.env`:
 ```bash
 USE_VNC=false       # Set to true on droplet
 DROPLET_IP=         # Your droplet IP for noVNC links
+```
+
+Cart tab behavior (optional, sensible defaults):
+
+```bash
+SHOW_CART_TAB=true          # Pin a tab on /cart (only takes effect when USE_VNC=true)
+CART_REFRESH_SECONDS=20     # How often that tab reloads
+CART_REFOCUS_SECONDS=4      # How often it steals focus back from other tabs
 ```
 
 ---
@@ -147,6 +158,9 @@ DROPLET_IP=         # Your droplet IP for noVNC links
 | `DROPLET_IP` | empty | `123.456.789.012` | For noVNC links |
 | `POLL_MIN` | `30` | `30` | Min seconds between polls |
 | `POLL_MAX` | `65` | `65` | Max seconds between polls |
+| `SHOW_CART_TAB` | n/a | `true` | Pin a tab on `/cart` (needs `USE_VNC=true`) |
+| `CART_REFRESH_SECONDS` | n/a | `20` | Cart tab reload cadence |
+| `CART_REFOCUS_SECONDS` | n/a | `4` | Cart tab re-focus cadence |
 
 ---
 

@@ -31,6 +31,11 @@ Requirements:
     USE_VNC=false                      # Set to true on droplet for noVNC access
     DROPLET_IP=                        # Your droplet IP (for noVNC links)
 
+    # Cart tab (noVNC only) — all optional, shown with defaults
+    SHOW_CART_TAB=true                 # Pin a tab on /cart so it's always visible
+    CART_REFRESH_SECONDS=20            # How often the cart tab reloads
+    CART_REFOCUS_SECONDS=4             # How often it steals focus back from other tabs
+
     # Grail loop (rare_items.json watcher) — all optional, shown with defaults
     GRAIL_POLL_MIN=10
     GRAIL_POLL_MAX=20
@@ -110,6 +115,14 @@ GRAIL_RETRY_COOLDOWN_SECONDS = int(os.getenv("GRAIL_RETRY_COOLDOWN_SECONDS", "12
 # noVNC setup (set USE_VNC=true on production droplet)
 USE_VNC       = os.getenv("USE_VNC", "false").lower() == "true"
 DROPLET_IP    = os.getenv("DROPLET_IP", "")
+
+# Cart tab — a dedicated tab pinned to /cart so it's always visible over
+# noVNC, instead of whatever page the scraping/grail tabs last navigated to.
+# Only meaningful when USE_VNC is on (there's no display to show it otherwise).
+CART_URL              = "https://wornwear.patagonia.com/cart"
+SHOW_CART_TAB         = os.getenv("SHOW_CART_TAB", "true").lower() == "true"
+CART_REFRESH_SECONDS  = int(os.getenv("CART_REFRESH_SECONDS", "20"))  # reload cadence
+CART_REFOCUS_SECONDS  = int(os.getenv("CART_REFOCUS_SECONDS", "4"))   # re-focus cadence
 
 # Active hours — bot only runs between ACTIVE_START and ACTIVE_END (America/Denver)
 ACTIVE_TZ    = ZoneInfo("America/Denver")
@@ -341,6 +354,43 @@ async def cart_expiry_warning(title: str, url: str, delay_seconds: int = 1500):
         title="Cart expiring in 5 minutes!",
         body=warning_body,
     )
+
+
+# ── Cart tab (noVNC) ─────────────────────────────────────────────────────────
+# A dedicated page pinned to /cart so a human watching over noVNC always has
+# a live, correct view of what's actually bagged — instead of whatever page
+# a scraping/grail tab last navigated to.
+
+_cart_page: Page | None = None
+
+
+async def refresh_cart_view(reload: bool = True) -> None:
+    """Bring the pinned cart tab back to front, optionally reloading it first
+    so it reflects the latest state. No-op if the cart tab isn't enabled."""
+    if _cart_page is None:
+        return
+    try:
+        if reload:
+            await _cart_page.reload(wait_until="domcontentloaded", timeout=15_000)
+        await _cart_page.bring_to_front()
+    except Exception as e:
+        log.warning(f"Cart tab refresh failed: {e}")
+
+
+async def cart_viewer_loop(cart_page: Page):
+    """Keep the cart tab visible and current. Other tabs performing searches
+    or add-to-cart clicks can steal window focus mid-poll; this periodically
+    snaps focus back to the cart tab and reloads it on a slower cadence."""
+    last_reload = time.monotonic()
+    try:
+        while True:
+            await asyncio.sleep(CART_REFOCUS_SECONDS)
+            due_for_reload = (time.monotonic() - last_reload) >= CART_REFRESH_SECONDS
+            if due_for_reload:
+                last_reload = time.monotonic()
+            await refresh_cart_view(reload=due_for_reload)
+    finally:
+        await cart_page.close()
 
 
 # ── Matching logic ────────────────────────────────────────────────────────────
@@ -810,6 +860,7 @@ async def bag_and_notify(page: Page, product: dict, match_reason: list[str]) -> 
             notification_body += f"\n\nComplete checkout here:\n{novnc_url}"
 
         await notify(title="Worn Wear - Item Bagged!", body=notification_body)
+        await refresh_cart_view()
 
         # Schedule 25-minute expiry warning
         asyncio.create_task(cart_expiry_warning(title, url))
@@ -980,7 +1031,7 @@ async def run_grail_loop(context: BrowserContext):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 async def run():
-    global _RARE
+    global _RARE, _cart_page
     _RARE = load_rare_items()
 
     log.info("Bot started.")
@@ -1016,10 +1067,20 @@ async def run():
         # General (broad, slow) and grail (narrow, tight-interval) loops share
         # this one browser/context and run concurrently — no second Chromium
         # process, just a second set of tabs.
-        await asyncio.gather(
-            run_general_loop(context),
-            run_grail_loop(context),
-        )
+        loops = [run_general_loop(context), run_grail_loop(context)]
+
+        if SHOW_CART_TAB and USE_VNC:
+            try:
+                _cart_page = await context.new_page()
+                await _cart_page.goto(CART_URL, wait_until="domcontentloaded", timeout=30_000)
+                await _cart_page.bring_to_front()
+                log.info(f"Cart tab pinned: {CART_URL}")
+                loops.append(cart_viewer_loop(_cart_page))
+            except Exception as e:
+                log.warning(f"Could not open pinned cart tab: {e}")
+                _cart_page = None
+
+        await asyncio.gather(*loops)
 
 
 if __name__ == "__main__":
