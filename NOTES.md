@@ -30,3 +30,8 @@
           instead of `seen_items.json` so it doesn't spam re-attempts on the
           same still-listed item every cycle. The general loop no longer
           special-cases rare items — the grail loop owns that job.
+
+### Bugs and problems:
+- The bot still tries to bag grail items and gives me a false positive that they're in my cart.
+- I have some perma-stuck items in the cart that the bot seems to continually bag even though they're not grails and not new.
+- It takes 8-10 minutes to completely poll through all of the URLs I have. This is too slow for the grail hunt... meaning, I need to sift through the garbage, and have multiple tabs hitting the keywords I think?
