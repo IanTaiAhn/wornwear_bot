@@ -64,7 +64,12 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from playwright.async_api import BrowserContext, Page, async_playwright
-from playwright_stealth import stealth
+
+try:
+    from playwright_stealth import Stealth
+    _stealth_obj = Stealth()
+except ImportError:
+    _stealth_obj = None
 
 load_dotenv()
 
@@ -1066,10 +1071,18 @@ async def run():
         )
 
         # Apply stealth mode to all pages to evade bot detection
-        async def apply_stealth_to_page(page: Page):
-            await stealth(page)
+        if _stealth_obj:
+            async def apply_stealth_to_page(page: Page):
+                try:
+                    # Try different methods that playwright-stealth might use
+                    if hasattr(_stealth_obj, 'apply_stealth'):
+                        await _stealth_obj.apply_stealth(page)
+                    elif hasattr(_stealth_obj, '__call__'):
+                        await _stealth_obj(page)
+                except Exception as e:
+                    log.warning(f"Stealth application failed: {e}")
 
-        context.on("page", apply_stealth_to_page)
+            context.on("page", apply_stealth_to_page)
 
         # General (broad, slow) and grail (narrow, tight-interval) loops share
         # this one browser/context and run concurrently — no second Chromium
