@@ -64,6 +64,7 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from playwright.async_api import BrowserContext, Page, async_playwright
+from playwright_stealth import stealth_async
 
 load_dotenv()
 
@@ -1063,6 +1064,12 @@ async def run():
             viewport={"width": 1280, "height": 800},
             locale="en-US",
         )
+
+        # Apply stealth mode to all pages to evade bot detection
+        async def apply_stealth_to_page(page: Page):
+            await stealth_async(page)
+
+        context.on("page", apply_stealth_to_page)
 
         # General (broad, slow) and grail (narrow, tight-interval) loops share
         # this one browser/context and run concurrently — no second Chromium
