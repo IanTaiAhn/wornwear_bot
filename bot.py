@@ -121,8 +121,8 @@ DROPLET_IP    = os.getenv("DROPLET_IP", "")
 # Only meaningful when USE_VNC is on (there's no display to show it otherwise).
 CART_URL              = "https://wornwear.patagonia.com/cart"
 SHOW_CART_TAB         = os.getenv("SHOW_CART_TAB", "true").lower() == "true"
-CART_REFRESH_SECONDS  = int(os.getenv("CART_REFRESH_SECONDS", "20"))  # reload cadence
-CART_REFOCUS_SECONDS  = int(os.getenv("CART_REFOCUS_SECONDS", "4"))   # re-focus cadence
+CART_REFRESH_SECONDS  = int(os.getenv("CART_REFRESH_SECONDS", "300"))  # reload cadence
+CART_REFOCUS_SECONDS  = int(os.getenv("CART_REFOCUS_SECONDS", "300"))   # re-focus cadence
 
 # Active hours — bot only runs between ACTIVE_START and ACTIVE_END (America/Denver)
 ACTIVE_TZ    = ZoneInfo("America/Denver")
