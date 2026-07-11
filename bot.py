@@ -108,7 +108,7 @@ NOTIFY_URL    = os.getenv("NOTIFY_URL", "")
 # never gets stuck behind the general loop's slow full-catalog scrape).
 GRAIL_POLL_MIN               = int(os.getenv("GRAIL_POLL_MIN", "10"))
 GRAIL_POLL_MAX               = int(os.getenv("GRAIL_POLL_MAX", "20"))
-GRAIL_TABS                   = int(os.getenv("GRAIL_TABS", "3"))
+GRAIL_TABS                   = int(os.getenv("GRAIL_TABS", "1"))
 GRAIL_COOLDOWN_SECONDS       = int(os.getenv("GRAIL_COOLDOWN_SECONDS", "1800"))  # after a confirmed bag (~cart hold length)
 GRAIL_RETRY_COOLDOWN_SECONDS = int(os.getenv("GRAIL_RETRY_COOLDOWN_SECONDS", "120"))  # after a failed/no-op attempt
 
