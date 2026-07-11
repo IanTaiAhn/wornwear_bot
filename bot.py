@@ -64,7 +64,18 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from playwright.async_api import BrowserContext, Page, async_playwright
-from playwright_stealth import stealth_async
+
+try:
+    from playwright_stealth import stealth_async
+except ImportError:
+    # Fallback if stealth_async not available
+    try:
+        from playwright_stealth import Stealth
+        stealth_async = Stealth().stealth_async
+    except ImportError:
+        # Last resort - define a no-op function
+        async def stealth_async(page):
+            pass
 
 load_dotenv()
 
