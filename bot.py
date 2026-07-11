@@ -666,7 +666,7 @@ async def _get_cart_count(page: Page) -> int | None:
 async def add_to_cart(page: Page, product_url: str) -> bool:
     try:
         log.info(f"Attempting add-to-cart: {product_url}")
-        await page.goto(product_url, wait_until="networkidle", timeout=90_000)
+        await page.goto(product_url, wait_until="domcontentloaded", timeout=60_000)
         await page.wait_for_timeout(random.randint(4000, 6000))
 
         # Get all available color options
