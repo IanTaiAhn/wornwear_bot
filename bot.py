@@ -731,8 +731,11 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
                 if size['id']:  # Only try to click if there's an actual size option
                     try:
                         size_label = page.locator(f"label[for='{size['id']}']").first
-                        await size_label.click(timeout=2000)
-                        await page.wait_for_timeout(800)
+                        # Wait a bit for any animations/overlays to settle
+                        await page.wait_for_timeout(1000)
+                        # Increase timeout and use force click to bypass interceptors
+                        await size_label.click(timeout=5000, force=True)
+                        await page.wait_for_timeout(1000)
                         is_checked = await page.evaluate(
                             f"() => document.getElementById('{size['id']}').checked"
                         )
