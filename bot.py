@@ -507,8 +507,8 @@ async def scrape_all_products(page: Page, url: str) -> list[dict]:
     disappears from the DOM mid-session is already safely stored.
     """
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(random.randint(2000, 3000))
+        await page.goto(url, wait_until="networkidle", timeout=45_000)
+        await page.wait_for_timeout(random.randint(5000, 8000))
     except Exception as e:
         log.warning(f"Failed to load {url}: {e}")
         return []
@@ -626,8 +626,8 @@ async def scrape_grail_page(page: Page, url: str) -> list[dict]:
     results page) this is a single page load and one DOM read, ~1-2s.
     """
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=20_000)
-        await page.wait_for_timeout(random.randint(800, 1500))
+        await page.goto(url, wait_until="networkidle", timeout=30_000)
+        await page.wait_for_timeout(random.randint(3000, 5000))
         return await page.evaluate(_EXTRACT_JS)
     except Exception as e:
         log.warning(f"[grail] Failed to check {url}: {e}")
@@ -665,8 +665,8 @@ async def _get_cart_count(page: Page) -> int | None:
 async def add_to_cart(page: Page, product_url: str) -> bool:
     try:
         log.info(f"Attempting add-to-cart: {product_url}")
-        await page.goto(product_url, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(random.randint(1500, 3000))
+        await page.goto(product_url, wait_until="networkidle", timeout=45_000)
+        await page.wait_for_timeout(random.randint(4000, 6000))
 
         # Get all available color options
         color_inputs = []
