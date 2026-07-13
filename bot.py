@@ -67,11 +67,10 @@ from dotenv import load_dotenv
 from playwright.async_api import BrowserContext, Page, async_playwright
 
 try:
-    from playwright_stealth import stealth_async
+    from playwright_stealth import Stealth
     _has_stealth = True
 except ImportError:
     _has_stealth = False
-    log.warning("playwright-stealth not installed - install with: uv pip install playwright-stealth")
 
 load_dotenv()
 
@@ -1102,7 +1101,15 @@ async def run():
         )
         return
 
-    async with async_playwright() as pw:
+    # Use Stealth to wrap playwright (all pages auto-stealthed)
+    playwright_context = Stealth().use_async(async_playwright()) if _has_stealth else async_playwright()
+
+    if _has_stealth:
+        log.info("Stealth mode enabled - all pages will have bot detection evasion")
+    else:
+        log.warning("playwright-stealth not available - running without stealth mode")
+
+    async with playwright_context as pw:
         # Configure browser based on VNC mode
         launch_args = ["--no-sandbox", "--disable-dev-shm-usage"]
         if USE_VNC:
@@ -1121,17 +1128,6 @@ async def run():
             viewport={"width": 1280, "height": 800},
             locale="en-US",
         )
-
-        # Apply stealth mode to all new pages to evade bot detection
-        if _has_stealth:
-            async def apply_stealth_to_page(page: Page):
-                try:
-                    await stealth_async(page)
-                    log.debug("Stealth mode applied to new page")
-                except Exception as e:
-                    log.warning(f"Stealth application failed: {e}")
-
-            context.on("page", apply_stealth_to_page)
 
         # General (broad, slow) and grail (narrow, tight-interval) loops share
         # this one browser/context and run concurrently — no second Chromium
