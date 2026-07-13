@@ -42,6 +42,7 @@ Requirements:
     GRAIL_TABS=3                       # concurrent tabs checking rare style numbers
     GRAIL_COOLDOWN_SECONDS=1800        # skip re-attempts on a confirmed bag for this long
     GRAIL_RETRY_COOLDOWN_SECONDS=120   # skip re-attempts on a failed attempt for this long
+    GRAIL_POST_ATTEMPT_DELAY=15        # pause after any add-to-cart attempt to prevent interference
 
 Matching logic:
   - If KEYWORDS set and STYLE_NUMBERS set: alert if keywords match OR style # matches
@@ -117,6 +118,7 @@ GRAIL_POLL_MAX               = int(os.getenv("GRAIL_POLL_MAX", "20"))
 GRAIL_TABS                   = int(os.getenv("GRAIL_TABS", "1"))
 GRAIL_COOLDOWN_SECONDS       = int(os.getenv("GRAIL_COOLDOWN_SECONDS", "1800"))  # after a confirmed bag (~cart hold length)
 GRAIL_RETRY_COOLDOWN_SECONDS = int(os.getenv("GRAIL_RETRY_COOLDOWN_SECONDS", "120"))  # after a failed/no-op attempt
+GRAIL_POST_ATTEMPT_DELAY     = int(os.getenv("GRAIL_POST_ATTEMPT_DELAY", "15"))  # pause after any add-to-cart attempt to prevent interference
 
 # noVNC setup (set USE_VNC=true on production droplet)
 USE_VNC       = os.getenv("USE_VNC", "false").lower() == "true"
@@ -513,7 +515,12 @@ async def scrape_all_products(page: Page, url: str) -> list[dict]:
     disappears from the DOM mid-session is already safely stored.
     """
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+        await page.goto(url, wait_until="commit", timeout=60_000)
+        # Wait for product listings to actually load (more stealthy than networkidle/domcontentloaded)
+        try:
+            await page.wait_for_selector('a[href*="/products/"]', timeout=30_000)
+        except Exception:
+            log.warning(f"No products found on {url} after 30s - may be empty results")
         await page.wait_for_timeout(random.randint(5000, 8000))
     except Exception as e:
         log.warning(f"Failed to load {url}: {e}")
@@ -632,7 +639,13 @@ async def scrape_grail_page(page: Page, url: str) -> list[dict]:
     results page) this is a single page load and one DOM read, ~1-2s.
     """
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        await page.goto(url, wait_until="commit", timeout=30_000)
+        # Wait for product listings to actually load (more stealthy than networkidle/domcontentloaded)
+        try:
+            await page.wait_for_selector('a[href*="/products/"]', timeout=15_000)
+        except Exception:
+            # Empty results page is fine for grail searches
+            pass
         await page.wait_for_timeout(random.randint(3000, 5000))
         return await page.evaluate(_EXTRACT_JS)
     except Exception as e:
@@ -769,7 +782,7 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
                 if await btn.is_visible(timeout=1500) and await btn.is_enabled(timeout=1500):
                     log.info(f"Clicking add-to-cart via: {sel}")
                     await btn.click()
-                    await page.wait_for_timeout(3000)
+                    await page.wait_for_timeout(5000)  # Increased from 3s to 5s for better verification
 
                     # Verify the item was actually added by checking for success indicators
                     success_indicators = [
@@ -806,8 +819,16 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
                             continue
 
                     # No clear text-based indicator either way — fall back to comparing
-                    # the header cart count before/after the click.
+                    # the header cart count before/after the click. Check multiple times
+                    # to handle delayed UI updates.
                     cart_count_after = await _get_cart_count(page)
+
+                    # If cart count check fails, wait and try again (UI might be updating)
+                    if cart_count_after is None and cart_count_before is not None:
+                        log.info("Cart count not readable, waiting 2s and retrying...")
+                        await page.wait_for_timeout(2000)
+                        cart_count_after = await _get_cart_count(page)
+
                     if (
                         cart_count_before is not None
                         and cart_count_after is not None
@@ -817,6 +838,20 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
                             f"Verified: cart count increased ({cart_count_before} -> {cart_count_after})"
                         )
                         return True
+
+                    # One final check after additional delay for slow UI updates
+                    if cart_count_before is not None:
+                        log.info("No cart count increase detected, waiting 3s for final check...")
+                        await page.wait_for_timeout(3000)
+                        cart_count_final = await _get_cart_count(page)
+                        if (
+                            cart_count_final is not None
+                            and cart_count_final > cart_count_before
+                        ):
+                            log.info(
+                                f"Verified (delayed): cart count increased ({cart_count_before} -> {cart_count_final})"
+                            )
+                            return True
 
                     # Still ambiguous — do NOT assume success. A false "bagged" report is
                     # far worse than a false failure for a bot bagging real, paid items.
@@ -1003,6 +1038,11 @@ async def run_grail_loop(context: BrowserContext):
                 grail_start_cooldown(
                     pid, GRAIL_COOLDOWN_SECONDS if bagged else GRAIL_RETRY_COOLDOWN_SECONDS
                 )
+
+                # Add extra delay after add-to-cart attempt to prevent next grail
+                # cycle from interfering with cart verification or checkout flow
+                log.info(f"[grail] Pausing {GRAIL_POST_ATTEMPT_DELAY}s after add-to-cart attempt before continuing...")
+                await asyncio.sleep(GRAIL_POST_ATTEMPT_DELAY)
 
     try:
         poll_count = 0
