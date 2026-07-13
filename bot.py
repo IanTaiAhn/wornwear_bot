@@ -37,9 +37,9 @@ Requirements:
     CART_REFOCUS_SECONDS=4             # How often it steals focus back from other tabs
 
     # Grail loop (rare_items.json watcher) — all optional, shown with defaults
-    GRAIL_POLL_MIN=10
-    GRAIL_POLL_MAX=20
-    GRAIL_TABS=3                       # concurrent tabs checking rare style numbers
+    GRAIL_POLL_MIN=30                  # matches general loop to avoid Cloudflare (was 10)
+    GRAIL_POLL_MAX=65                  # matches general loop to avoid Cloudflare (was 20)
+    GRAIL_TABS=1                       # concurrent tabs checking rare style numbers (keep at 1 to avoid detection)
     GRAIL_COOLDOWN_SECONDS=1800        # skip re-attempts on a confirmed bag for this long
     GRAIL_RETRY_COOLDOWN_SECONDS=120   # skip re-attempts on a failed attempt for this long
     GRAIL_POST_ATTEMPT_DELAY=15        # pause after any add-to-cart attempt to prevent interference
@@ -113,8 +113,8 @@ NOTIFY_URL    = os.getenv("NOTIFY_URL", "")
 # style numbers in rare_items.json via narrow single-item searches, running
 # concurrently with the general loop in the same browser (own tab(s), so it
 # never gets stuck behind the general loop's slow full-catalog scrape).
-GRAIL_POLL_MIN               = int(os.getenv("GRAIL_POLL_MIN", "10"))
-GRAIL_POLL_MAX               = int(os.getenv("GRAIL_POLL_MAX", "20"))
+GRAIL_POLL_MIN               = int(os.getenv("GRAIL_POLL_MIN", "30"))  # Match general loop to avoid Cloudflare
+GRAIL_POLL_MAX               = int(os.getenv("GRAIL_POLL_MAX", "65"))  # Match general loop to avoid Cloudflare
 GRAIL_TABS                   = int(os.getenv("GRAIL_TABS", "1"))
 GRAIL_COOLDOWN_SECONDS       = int(os.getenv("GRAIL_COOLDOWN_SECONDS", "1800"))  # after a confirmed bag (~cart hold length)
 GRAIL_RETRY_COOLDOWN_SECONDS = int(os.getenv("GRAIL_RETRY_COOLDOWN_SECONDS", "120"))  # after a failed/no-op attempt
