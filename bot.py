@@ -513,7 +513,7 @@ async def scrape_all_products(page: Page, url: str) -> list[dict]:
     disappears from the DOM mid-session is already safely stored.
     """
     try:
-        await page.goto(url, wait_until="networkidle", timeout=90_000)
+        await page.goto(url, wait_until="domcontentloaded", timeout=60_000)
         await page.wait_for_timeout(random.randint(5000, 8000))
     except Exception as e:
         log.warning(f"Failed to load {url}: {e}")
@@ -632,7 +632,7 @@ async def scrape_grail_page(page: Page, url: str) -> list[dict]:
     results page) this is a single page load and one DOM read, ~1-2s.
     """
     try:
-        await page.goto(url, wait_until="networkidle", timeout=60_000)
+        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
         await page.wait_for_timeout(random.randint(3000, 5000))
         return await page.evaluate(_EXTRACT_JS)
     except Exception as e:
