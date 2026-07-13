@@ -67,10 +67,11 @@ from dotenv import load_dotenv
 from playwright.async_api import BrowserContext, Page, async_playwright
 
 try:
-    from playwright_stealth import Stealth
-    _stealth_obj = Stealth()
+    from playwright_stealth import stealth_async
+    _has_stealth = True
 except ImportError:
-    _stealth_obj = None
+    _has_stealth = False
+    log.warning("playwright-stealth not installed - install with: uv pip install playwright-stealth")
 
 load_dotenv()
 
@@ -646,7 +647,7 @@ async def scrape_grail_page(page: Page, url: str) -> list[dict]:
         except Exception:
             # Empty results page is fine for grail searches
             pass
-        await page.wait_for_timeout(random.randint(3000, 5000))
+        await page.wait_for_timeout(random.randint(2000, 6000))  # More variable timing to avoid patterns
         return await page.evaluate(_EXTRACT_JS)
     except Exception as e:
         log.warning(f"[grail] Failed to check {url}: {e}")
@@ -1019,7 +1020,15 @@ async def run_grail_loop(context: BrowserContext):
     )
 
     async def check_bucket(page: Page, urls: list[str]):
-        for url in urls:
+        for i, url in enumerate(urls):
+            # Add random delay between grail checks to avoid bot-pattern detection
+            # (except before the first URL in the bucket)
+            # Using 15-25s to match old bot's ~60s URL spacing (considering the ~7s page load time)
+            if i > 0:
+                inter_check_delay = random.uniform(15, 25)
+                log.info(f"[grail]  Pausing {inter_check_delay:.1f}s before next grail check...")
+                await asyncio.sleep(inter_check_delay)
+
             products = await scrape_grail_page(page, url)
             for product in products:
                 purl = product.get("url", "")
@@ -1113,15 +1122,12 @@ async def run():
             locale="en-US",
         )
 
-        # Apply stealth mode to all pages to evade bot detection
-        if _stealth_obj:
+        # Apply stealth mode to all new pages to evade bot detection
+        if _has_stealth:
             async def apply_stealth_to_page(page: Page):
                 try:
-                    # Try different methods that playwright-stealth might use
-                    if hasattr(_stealth_obj, 'apply_stealth'):
-                        await _stealth_obj.apply_stealth(page)
-                    elif hasattr(_stealth_obj, '__call__'):
-                        await _stealth_obj(page)
+                    await stealth_async(page)
+                    log.debug("Stealth mode applied to new page")
                 except Exception as e:
                     log.warning(f"Stealth application failed: {e}")
 
