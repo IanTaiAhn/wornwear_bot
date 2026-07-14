@@ -42,7 +42,7 @@ Requirements:
     # Grail loop (rare_items.json watcher) — all optional, shown with defaults
     GRAIL_POLL_MIN=30                  # matches general loop to avoid Cloudflare (was 10)
     GRAIL_POLL_MAX=65                  # matches general loop to avoid Cloudflare (was 20)
-    GRAIL_TABS=1                       # concurrent tabs checking rare style numbers (keep at 1 to avoid detection)
+    GRAIL_TABS=1                       # concurrent tabs checking rare style numbers (keep at 1 to avoid detection, set to 0 to disable grail loop)
     GRAIL_COOLDOWN_SECONDS=1800        # skip re-attempts on a confirmed bag for this long
     GRAIL_RETRY_COOLDOWN_SECONDS=120   # skip re-attempts on a failed attempt for this long
     GRAIL_POST_ATTEMPT_DELAY=15        # pause after any add-to-cart attempt to prevent interference
@@ -1016,7 +1016,11 @@ async def run_grail_loop(context: BrowserContext):
         log.info("[grail] rare_items.json has no entries — grail loop disabled.")
         return
 
-    tab_count = max(1, GRAIL_TABS)
+    if GRAIL_TABS <= 0:
+        log.info("[grail] GRAIL_TABS set to 0 — grail loop disabled.")
+        return
+
+    tab_count = GRAIL_TABS
     pages = [await context.new_page() for _ in range(tab_count)]
 
     log.info(
@@ -1099,18 +1103,18 @@ async def run():
 
     log.info("Bot started.")
     log.info(f"  General loop: {'enabled' if ENABLE_GENERAL_LOOP else 'disabled'}")
-    log.info(f"  Rare styles:  {len(_RARE.get('style_numbers', []))} (grail loop)")
+    log.info(f"  Grail loop:   {'disabled (GRAIL_TABS=0)' if GRAIL_TABS <= 0 else f'{GRAIL_TABS} tab(s), {len(_RARE.get(\"style_numbers\", []))} rare styles'}")
     log.info(f"  VNC mode:     {'enabled' if USE_VNC else 'disabled (local/headless)'}")
 
     # Check if at least one loop has something to do
     general_has_work = ENABLE_GENERAL_LOOP and (KEYWORDS or STYLE_NUMBERS)
-    grail_has_work = _RARE.get("style_numbers") or _RARE.get("url_patterns")
+    grail_has_work = GRAIL_TABS > 0 and (_RARE.get("style_numbers") or _RARE.get("url_patterns"))
 
     if not general_has_work and not grail_has_work:
         log.error(
             "No work configured for either loop:\n"
             "  - General loop: " + ("disabled" if not ENABLE_GENERAL_LOOP else "no KEYWORDS or STYLE_NUMBERS set") + "\n"
-            "  - Grail loop: no rare_items.json entries\n"
+            "  - Grail loop: " + ("GRAIL_TABS=0 (disabled)" if GRAIL_TABS <= 0 else "no rare_items.json entries") + "\n"
             "At least one loop must have work to do. Exiting."
         )
         return
