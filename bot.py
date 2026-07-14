@@ -700,11 +700,13 @@ async def add_to_cart(page: Page, product_url: str) -> bool:
                 if size['id']:  # Only try to click if there's an actual size option
                     try:
                         size_label = page.locator(f"label[for='{size['id']}']").first
-                        # Wait a bit for any animations/overlays to settle
-                        await page.wait_for_timeout(1000)
-                        # Increase timeout and use force click to bypass interceptors
-                        await size_label.click(timeout=5000, force=True)
-                        await page.wait_for_timeout(1000)
+                        # A normal (non-forced) click is intentional: sold-out sizes are
+                        # covered by an overlay rather than marked disabled, so Playwright's
+                        # click-interception check failing is how we detect "sold out" and
+                        # skip to the next size. force=True bypasses that and lets the bot
+                        # "select" sold-out sizes, which broke real add-to-cart bagging.
+                        await size_label.click(timeout=2000)
+                        await page.wait_for_timeout(800)
                         is_checked = await page.evaluate(
                             f"() => document.getElementById('{size['id']}').checked"
                         )
