@@ -36,6 +36,9 @@ Requirements:
     CART_REFRESH_SECONDS=20            # How often the cart tab reloads
     CART_REFOCUS_SECONDS=4             # How often it steals focus back from other tabs
 
+    # General loop (vintage discovery) — all optional, shown with defaults
+    ENABLE_GENERAL_LOOP=true           # Set to false to disable vintage discovery (only run grail loop)
+
     # Grail loop (rare_items.json watcher) — all optional, shown with defaults
     GRAIL_POLL_MIN=30                  # matches general loop to avoid Cloudflare (was 10)
     GRAIL_POLL_MAX=65                  # matches general loop to avoid Cloudflare (was 20)
@@ -108,6 +111,9 @@ POLL_MIN      = int(os.getenv("POLL_MIN", "30"))
 POLL_MAX      = int(os.getenv("POLL_MAX", "65"))
 AUTO_ADD_CART = os.getenv("AUTO_ADD_CART", "false").lower() == "true"
 NOTIFY_URL    = os.getenv("NOTIFY_URL", "")
+
+# General loop toggle — set to false to disable vintage discovery and only run grail loop
+ENABLE_GENERAL_LOOP = os.getenv("ENABLE_GENERAL_LOOP", "true").lower() == "true"
 
 # Grail loop — a second, much tighter poll loop that watches only the rare
 # style numbers in rare_items.json via narrow single-item searches, running
@@ -1092,12 +1098,20 @@ async def run():
     _RARE = load_rare_items()
 
     log.info("Bot started.")
-    log.info(f"  Rare styles: {len(_RARE.get('style_numbers', []))} (grail loop)")
-    log.info(f"  VNC mode:    {'enabled' if USE_VNC else 'disabled (local/headless)'}")
+    log.info(f"  General loop: {'enabled' if ENABLE_GENERAL_LOOP else 'disabled'}")
+    log.info(f"  Rare styles:  {len(_RARE.get('style_numbers', []))} (grail loop)")
+    log.info(f"  VNC mode:     {'enabled' if USE_VNC else 'disabled (local/headless)'}")
 
-    if not KEYWORDS and not STYLE_NUMBERS and not _RARE.get("style_numbers") and not _RARE.get("url_patterns"):
+    # Check if at least one loop has something to do
+    general_has_work = ENABLE_GENERAL_LOOP and (KEYWORDS or STYLE_NUMBERS)
+    grail_has_work = _RARE.get("style_numbers") or _RARE.get("url_patterns")
+
+    if not general_has_work and not grail_has_work:
         log.error(
-            "No KEYWORDS, STYLE_NUMBERS, or rare_items.json entries configured — nothing to search for. Exiting."
+            "No work configured for either loop:\n"
+            "  - General loop: " + ("disabled" if not ENABLE_GENERAL_LOOP else "no KEYWORDS or STYLE_NUMBERS set") + "\n"
+            "  - Grail loop: no rare_items.json entries\n"
+            "At least one loop must have work to do. Exiting."
         )
         return
 
@@ -1132,7 +1146,10 @@ async def run():
         # General (broad, slow) and grail (narrow, tight-interval) loops share
         # this one browser/context and run concurrently — no second Chromium
         # process, just a second set of tabs.
-        loops = [run_general_loop(context), run_grail_loop(context)]
+        loops = []
+        if ENABLE_GENERAL_LOOP:
+            loops.append(run_general_loop(context))
+        loops.append(run_grail_loop(context))
 
         if SHOW_CART_TAB and USE_VNC:
             try:
