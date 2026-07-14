@@ -1103,7 +1103,15 @@ async def run():
 
     log.info("Bot started.")
     log.info(f"  General loop: {'enabled' if ENABLE_GENERAL_LOOP else 'disabled'}")
-    log.info(f"  Grail loop:   {'disabled (GRAIL_TABS=0)' if GRAIL_TABS <= 0 else f'{GRAIL_TABS} tab(s), {len(_RARE.get(\"style_numbers\", []))} rare styles'}")
+
+    # Build grail loop status string (can't use nested f-strings with escaped quotes)
+    if GRAIL_TABS <= 0:
+        grail_status = "disabled (GRAIL_TABS=0)"
+    else:
+        rare_count = len(_RARE.get("style_numbers", []))
+        grail_status = f"{GRAIL_TABS} tab(s), {rare_count} rare styles"
+    log.info(f"  Grail loop:   {grail_status}")
+
     log.info(f"  VNC mode:     {'enabled' if USE_VNC else 'disabled (local/headless)'}")
 
     # Check if at least one loop has something to do
